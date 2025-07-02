@@ -1,0 +1,769 @@
+﻿@page "/reports"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.TimeEntry
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@using TechFlowERP.Shared.Components.Charts.Dashboard
+@using TechFlowERP.Shared.Models.Charts
+@inject IProjectService ProjectService
+@inject IEmployeeService EmployeeService
+@inject IClientService ClientService
+@inject ITimeEntryService TimeEntryService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<Index> Logger
+
+<PageTitle>비즈니스 리포트 - TechFlow ERP</PageTitle>
+
+<div class="container-fluid">
+    <!-- 📊 Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-chart-line me-2"></i>비즈니스 리포트
+                    </h2>
+                    <p class="text-muted mb-0">프로젝트 수익성, 직원 성과, 클라이언트 분석을 통한 비즈니스 인사이트</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="input-group" style="width: 200px;">
+                        <span class="input-group-text"><i class="fas fa-calendar"></i></span>
+                        <select @bind="selectedPeriod" class="form-select">
+                            <option value="week">최근 1주</option>
+                            <option value="month">최근 1개월</option>
+                            <option value="quarter">최근 3개월</option>
+                            <option value="year">최근 1년</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline-primary" @onclick="RefreshData">
+                        <i class="fas fa-sync me-1"></i>새로고침
+                    </button>
+                    <div class="btn-group">
+                        <button class="btn btn-success" @onclick="ExportReports">
+                            <i class="fas fa-download me-1"></i>내보내기
+                        </button>
+                        <button class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                            <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" @onclick="@(() => ExportReport("pdf"))">
+                                    <i class="fas fa-file-pdf me-2"></i>PDF 내보내기
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" @onclick="@(() => ExportReport("excel"))">
+                                    <i class="fas fa-file-excel me-2"></i>Excel 내보내기
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" @onclick="@(() => ExportReport("csv"))">
+                                    <i class="fas fa-file-csv me-2"></i>CSV 내보내기
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else
+    {
+        <!-- 📊 Quick Stats Overview -->
+        <div class="row mb-4">
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">총 매출</h6>
+                                <h3 class="mb-0 fw-bold">@totalRevenue.ToString("C0")</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-arrow-up me-1"></i>전월 대비 @revenueGrowth.ToString("F1")%
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-dollar-sign fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">평균 수익률</h6>
+                                <h3 class="mb-0 fw-bold">@averageProfitMargin.ToString("F1")%</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-chart-line me-1"></i>목표: 25%
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-percentage fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">평균 활용도</h6>
+                                <h3 class="mb-0 fw-bold">@averageUtilization.ToString("F1")%</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-users me-1"></i>@@activeEmployees명 활성
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-clock fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">고객 만족도</h6>
+                                <h3 class="mb-0 fw-bold">@customerSatisfaction.ToString("F1")점</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-star me-1"></i>5점 만점
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-heart fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📈 Main Reports Grid -->
+        <div class="row">
+            <!-- 프로젝트 수익성 분석 -->
+            <div class="col-xl-8 col-lg-7 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>프로젝트 수익성 분석
+                        </h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary @(profitabilityView == "chart" ? "active" : "")"
+                                    @onclick="@(() => SetProfitabilityView("chart"))">
+                                차트
+                            </button>
+                            <button class="btn btn-outline-secondary @(profitabilityView == "table" ? "active" : "")"
+                                    @onclick="@(() => SetProfitabilityView("table"))">
+                                테이블
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (profitabilityView == "chart")
+                        {
+                            <div style="height: 350px;">
+                                <!-- 프로젝트 수익성 스캐터 차트 -->
+                                <div class="text-center py-5">
+                                    <i class="fas fa-chart-scatter fa-3x text-muted mb-3"></i>
+                                    <h6 class="text-muted">프로젝트 수익성 차트</h6>
+                                    <p class="text-muted small">예산 대비 수익률을 시각화합니다</p>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>프로젝트</th>
+                                            <th>클라이언트</th>
+                                            <th>예산</th>
+                                            <th>실제비용</th>
+                                            <th>수익</th>
+                                            <th>수익률</th>
+                                            <th>상태</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var project in profitabilityData.Take(5))
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <a href="/projects/@project.ProjectId" class="text-decoration-none fw-semibold">
+                                                        @project.ProjectName
+                                                    </a>
+                                                </td>
+                                                <td>@project.ClientName</td>
+                                                <td>@project.Budget.ToString("C0")</td>
+                                                <td>@project.ActualCost.ToString("C0")</td>
+                                                <td>
+                                                    <span class="fw-semibold @(project.Profit >= 0 ? "text-success" : "text-danger")">
+                                                        @project.Profit.ToString("C0")
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge @GetProfitMarginBadgeClass(project.ProfitMargin)">
+                                                        @project.ProfitMargin.ToString("F1")%
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge @GetProjectStatusBadgeClass(project.Status)">
+                                                        @GetProjectStatusText(project.Status)
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- 직원 성과 분석 -->
+            <div class="col-xl-4 col-lg-5 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-users me-2"></i>직원 성과 분석
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <UtilizationChart Data="@employeePerformanceData"
+                                          Title="직원 활용도"
+                                          Height="300"
+                                          MaxEmployees="8" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 Additional Reports Row -->
+        <div class="row">
+            <!-- 클라이언트 분석 -->
+            <div class="col-xl-6 col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-building me-2"></i>클라이언트 분석
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-primary mb-1">@totalClients</h4>
+                                    <p class="text-muted small mb-0">총 클라이언트</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-success mb-1">@activeClients</h4>
+                                    <p class="text-muted small mb-0">활성 클라이언트</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>클라이언트</th>
+                                        <th>프로젝트 수</th>
+                                        <th>총 매출</th>
+                                        <th>규모</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var client in clientAnalysisData.Take(5))
+                                    {
+                                        <tr>
+                                            <td>
+                                                <a href="/clients/@client.ClientId" class="text-decoration-none">
+                                                    @client.ClientName
+                                                </a>
+                                            </td>
+                                            <td>@client.ProjectCount</td>
+                                            <td>@client.TotalRevenue.ToString("C0")</td>
+                                            <td>
+                                                <span class="badge @GetClientSizeBadgeClass(client.Size)">
+                                                    @GetClientSizeText(client.Size)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 기술 스택 분석 -->
+            <div class="col-xl-6 col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-code me-2"></i>기술 스택 분석
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-info mb-1">@totalTechnologies</h4>
+                                    <p class="text-muted small mb-0">사용 기술</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-warning mb-1">@averageSkillsPerEmployee.ToString("F1")</h4>
+                                    <p class="text-muted small mb-0">직원당 평균 기술</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tech-stack-list">
+                            @foreach (var tech in technologyData.Take(8))
+                            {
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <div class="tech-indicator me-2" style="background-color: @GetTechColor(tech.Technology);"></div>
+                                        <span class="small">@tech.Technology</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-primary">@@tech.ProjectCount개 프로젝트</span>
+                                        <span class="badge bg-secondary">@@tech.ExpertCount명</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📋 Trend Analysis -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trending-up me-2"></i>트렌드 분석
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <RevenueChart Data="@revenueChartData"
+                                      Title="매출 트렌드"
+                                      Height="400"
+                                      SeriesTitle="월별 매출" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // 📊 State Variables
+    private bool isLoading = true;
+    private string selectedPeriod = "month";
+    private string profitabilityView = "table";
+
+    // 📈 Key Metrics
+    private decimal totalRevenue = 0;
+    private decimal revenueGrowth = 0;
+    private decimal averageProfitMargin = 0;
+    private decimal averageUtilization = 0;
+    private decimal customerSatisfaction = 0;
+    private int activeEmployees = 0;
+    private int totalClients = 0;
+    private int activeClients = 0;
+    private int totalTechnologies = 0;
+    private decimal averageSkillsPerEmployee = 0;
+
+    // 📋 Data Lists
+    private List<ProjectProfitabilityData> profitabilityData = new();
+    private List<UtilizationChartData> employeePerformanceData = new();
+    private List<ClientAnalysisData> clientAnalysisData = new();
+    private List<TechnologyData> technologyData = new();
+    private List<RevenueChartData> revenueChartData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportsData();
+    }
+
+    private async Task LoadReportsData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 병렬로 데이터 로드
+            var tasks = new[]
+            {
+                LoadKeyMetrics(),
+                LoadProfitabilityData(),
+                LoadEmployeePerformanceData(),
+                LoadClientAnalysisData(),
+                LoadTechnologyData(),
+                LoadRevenueChartData()
+            };
+
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "리포트 데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadKeyMetrics()
+    {
+        try
+        {
+            // 실제 API 호출 대신 샘플 데이터
+            totalRevenue = 125000000;
+            revenueGrowth = 15.3m;
+            averageProfitMargin = 28.5m;
+            averageUtilization = 82.7m;
+            customerSatisfaction = 4.6m;
+            activeEmployees = 24;
+            totalClients = 18;
+            activeClients = 15;
+            totalTechnologies = 12;
+            averageSkillsPerEmployee = 3.4m;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "핵심 지표 로드 실패");
+        }
+    }
+
+    private async Task LoadProfitabilityData()
+    {
+        try
+        {
+            // 샘플 데이터
+            profitabilityData = new List<ProjectProfitabilityData>
+            {
+                new() { ProjectId = Guid.NewGuid(), ProjectName = "ERP 시스템 구축", ClientName = "A 기업", Budget = 50000000, ActualCost = 38000000, Profit = 12000000, ProfitMargin = 24.0m, Status = ProjectStatus.Completed },
+                new() { ProjectId = Guid.NewGuid(), ProjectName = "모바일 앱 개발", ClientName = "B 기업", Budget = 30000000, ActualCost = 22000000, Profit = 8000000, ProfitMargin = 26.7m, Status = ProjectStatus.Active },
+                new() { ProjectId = Guid.NewGuid(), ProjectName = "웹사이트 리뉴얼", ClientName = "C 기업", Budget = 20000000, ActualCost = 16000000, Profit = 4000000, ProfitMargin = 20.0m, Status = ProjectStatus.Completed },
+                new() { ProjectId = Guid.NewGuid(), ProjectName = "AI 솔루션 개발", ClientName = "D 기업", Budget = 80000000, ActualCost = 55000000, Profit = 25000000, ProfitMargin = 31.3m, Status = ProjectStatus.Active },
+                new() { ProjectId = Guid.NewGuid(), ProjectName = "데이터 분석 플랫폼", ClientName = "E 기업", Budget = 60000000, ActualCost = 45000000, Profit = 15000000, ProfitMargin = 25.0m, Status = ProjectStatus.OnHold }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "수익성 데이터 로드 실패");
+        }
+    }
+
+    private async Task LoadEmployeePerformanceData()
+    {
+        try
+        {
+            var employees = new[] { "김개발", "이프론트", "박백엔드", "최디자인", "정기획", "강테스트", "윤데브옵스", "임풀스택" };
+            var departments = new[] { "개발팀", "디자인팀", "기획팀", "QA팀" };
+            var random = new Random();
+
+            employeePerformanceData = employees.Select(emp => new UtilizationChartData
+            {
+                EmployeeName = emp,
+                EmployeeId = Guid.NewGuid().ToString(),
+                BillableHours = Math.Round(130 + random.NextDouble() * 50, 1),
+                NonBillableHours = Math.Round(15 + random.NextDouble() * 35, 1),
+                Department = departments[random.Next(departments.Length)]
+            }).ToList();
+
+            foreach (var item in employeePerformanceData)
+            {
+                item.TotalHours = item.BillableHours + item.NonBillableHours;
+                item.UtilizationRate = Math.Round((item.BillableHours / item.TotalHours) * 100, 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 성과 데이터 로드 실패");
+        }
+    }
+
+    private async Task LoadClientAnalysisData()
+    {
+        try
+        {
+            clientAnalysisData = new List<ClientAnalysisData>
+            {
+                new() { ClientId = Guid.NewGuid(), ClientName = "삼성전자", ProjectCount = 5, TotalRevenue = 45000000, Size = CompanySizeCategory.Large },
+                new() { ClientId = Guid.NewGuid(), ClientName = "네이버", ProjectCount = 3, TotalRevenue = 28000000, Size = CompanySizeCategory.Large },
+                new() { ClientId = Guid.NewGuid(), ClientName = "스타트업 A", ProjectCount = 2, TotalRevenue = 15000000, Size = CompanySizeCategory.Medium },
+                new() { ClientId = Guid.NewGuid(), ClientName = "중소기업 B", ProjectCount = 1, TotalRevenue = 8000000, Size = CompanySizeCategory.Small },
+                new() { ClientId = Guid.NewGuid(), ClientName = "카카오", ProjectCount = 4, TotalRevenue = 35000000, Size = CompanySizeCategory.Large }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "클라이언트 분석 데이터 로드 실패");
+        }
+    }
+
+    private async Task LoadTechnologyData()
+    {
+        try
+        {
+            technologyData = new List<TechnologyData>
+            {
+                new() { Technology = "React", ProjectCount = 8, ExpertCount = 6 },
+                new() { Technology = "C#", ProjectCount = 12, ExpertCount = 8 },
+                new() { Technology = "Node.js", ProjectCount = 6, ExpertCount = 4 },
+                new() { Technology = "Python", ProjectCount = 5, ExpertCount = 3 },
+                new() { Technology = "Vue.js", ProjectCount = 4, ExpertCount = 3 },
+                new() { Technology = "MySQL", ProjectCount = 10, ExpertCount = 7 },
+                new() { Technology = "Azure", ProjectCount = 7, ExpertCount = 5 },
+                new() { Technology = "Docker", ProjectCount = 9, ExpertCount = 6 }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 데이터 로드 실패");
+        }
+    }
+
+    private async Task LoadRevenueChartData()
+    {
+        try
+        {
+            var baseDate = DateTime.Now.AddMonths(-11);
+            revenueChartData = new List<RevenueChartData>();
+
+            for (int i = 0; i < 12; i++)
+            {
+                var date = baseDate.AddMonths(i);
+                var amount = 8000000 + (i * 1200000) + (decimal)(new Random().NextDouble() * 3000000);
+
+                revenueChartData.Add(new RevenueChartData
+                {
+                    Date = date,
+                    Amount = Math.Round(amount, 0),
+                    Period = date.ToString("MM월"),
+                    Category = "Revenue"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "매출 차트 데이터 로드 실패");
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadReportsData();
+    }
+
+    private void SetProfitabilityView(string view)
+    {
+        profitabilityView = view;
+        StateHasChanged();
+    }
+
+    private async Task ExportReports()
+    {
+        await ExportReport("pdf");
+    }
+
+    private async Task ExportReport(string format)
+    {
+        try
+        {
+            // TODO: 실제 내보내기 구현
+            await JSRuntime.InvokeVoidAsync("alert", $"{format.ToUpper()} 형식으로 리포트를 내보냅니다.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "리포트 내보내기 실패: {Format}", format);
+        }
+    }
+
+    // 🎨 Helper Methods
+    private string GetProfitMarginBadgeClass(decimal margin)
+    {
+        return margin switch
+        {
+            >= 30 => "bg-success",
+            >= 20 => "bg-primary",
+            >= 10 => "bg-warning",
+            >= 0 => "bg-secondary",
+            _ => "bg-danger"
+        };
+    }
+
+    private string GetProjectStatusBadgeClass(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "bg-secondary",
+            ProjectStatus.Active => "bg-success",
+            ProjectStatus.OnHold => "bg-warning",
+            ProjectStatus.Completed => "bg-primary",
+            ProjectStatus.Cancelled => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetProjectStatusText(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "계획중",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetClientSizeBadgeClass(CompanySizeCategory size)
+    {
+        return size switch
+        {
+            CompanySizeCategory.Small => "bg-info",
+            CompanySizeCategory.Medium => "bg-primary",
+            CompanySizeCategory.Large => "bg-success",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetClientSizeText(CompanySizeCategory size)
+    {
+        return size switch
+        {
+            CompanySizeCategory.Small => "소규모",
+            CompanySizeCategory.Medium => "중간규모",
+            CompanySizeCategory.Large => "대규모",
+            _ => "미분류"
+        };
+    }
+
+    private string GetTechColor(string technology)
+    {
+        // 기존 ChartColors.TechStack Dictionary 직접 사용
+        return ChartColors.TechStack.GetValueOrDefault(technology, ChartColors.TechStack["Other"]);
+    }
+
+    // 📊 Data Models
+    public class ProjectProfitabilityData
+    {
+        public Guid ProjectId { get; set; }
+        public string ProjectName { get; set; } = string.Empty;
+        public string ClientName { get; set; } = string.Empty;
+        public decimal Budget { get; set; }
+        public decimal ActualCost { get; set; }
+        public decimal Profit { get; set; }
+        public decimal ProfitMargin { get; set; }
+        public ProjectStatus Status { get; set; }
+    }
+
+    public class ClientAnalysisData
+    {
+        public Guid ClientId { get; set; }
+        public string ClientName { get; set; } = string.Empty;
+        public int ProjectCount { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public CompanySizeCategory Size { get; set; }
+    }
+
+    public class TechnologyData
+    {
+        public string Technology { get; set; } = string.Empty;
+        public int ProjectCount { get; set; }
+        public int ExpertCount { get; set; }
+    }
+}
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .bg-gradient-success {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .bg-gradient-info {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+
+    .bg-gradient-warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    .text-white-50 {
+        color: rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .text-white-75 {
+        color: rgba(255, 255, 255, 0.75) !important;
+    }
+
+    .card {
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        border: none;
+    }
+
+    .tech-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .tech-stack-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .table-responsive {
+        max-height: 400px;
+    }
+
+    .card-body {
+        position: relative;
+    }
+
+    .btn-group .btn.active {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+        color: white;
+    }
+</style>

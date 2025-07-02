@@ -1,0 +1,59 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="TechFlowERP - IT Service Management System" />
+    <title>TechFlowERP</title>
+    <base href="/" />
+
+    @* 🎨 CSS 파일들 *@
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="app.css" rel="stylesheet" />
+    <link href="TechFlowERP.Web.styles.css" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+
+    @* 🍞 Toast CSS *@
+    <link href="_content/Blazored.Toast/blazored-toast.min.css" rel="stylesheet" />
+
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+
+    @* 🔄 Loading indicator *@
+    <div id="blazor-error-ui">
+        <environment include="Staging,Production">
+            An error has occurred. This application may no longer respond until reloaded.
+        </environment>
+        <environment include="Development">
+            An unhandled exception has occurred. See browser dev tools for details.
+        </environment>
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    @* 📱 JavaScript 파일들 *@
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_content/Blazored.Toast/blazored-toast.min.js"></script>
+
+    @* ✅ AuthenticationStateProvider 초기화 스크립트 *@
+    <script>
+        window.blazorStarted = new Promise((resolve) => {
+            Blazor.start().then(() => {
+                resolve();
+            });
+        });
+    </script>
+
+    @* 🔄 Redux DevTools (개발 환경에서만) *@
+    <environment include="Development">
+        <script src="_content/Fluxor.Blazor.Web/index.js"></script>
+    </environment>
+</body>
+
+</html>

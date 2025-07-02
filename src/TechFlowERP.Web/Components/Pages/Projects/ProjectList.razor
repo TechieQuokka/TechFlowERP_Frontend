@@ -1,0 +1,630 @@
+﻿@page "/projects"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject IProjectService ProjectService
+@inject IClientService ClientService
+@inject IEmployeeService EmployeeService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProjectList> Logger
+
+<PageTitle>프로젝트 관리</PageTitle>
+
+<div class="container-fluid">
+    <!-- 📊 Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-project-diagram me-2"></i>프로젝트 관리
+                    </h2>
+                    <p class="text-muted mb-0">진행 중인 프로젝트와 수익성을 관리하세요</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" @onclick="NavigateToCreate">
+                        <i class="fas fa-plus me-2"></i>새 프로젝트 추가
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔍 Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- 검색어 -->
+                        <div class="col-md-4">
+                            <label class="form-label">검색</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input type="text" class="form-control" placeholder="프로젝트명, 코드로 검색..."
+                                       @bind="searchTerm" @onkeypress="OnSearchKeyPress" />
+                            </div>
+                        </div>
+
+                        <!-- 상태 필터 -->
+                        <div class="col-md-2">
+                            <label class="form-label">상태</label>
+                            <select class="form-select" @bind="selectedStatus">
+                                <option value="">전체 상태</option>
+                                <option value="@ProjectStatus.Planning">기획</option>
+                                <option value="@ProjectStatus.Active">진행중</option>
+                                <option value="@ProjectStatus.OnHold">보류</option>
+                                <option value="@ProjectStatus.Completed">완료</option>
+                                <option value="@ProjectStatus.Cancelled">취소</option>
+                            </select>
+                        </div>
+
+                        <!-- 클라이언트 필터 -->
+                        <div class="col-md-3">
+                            <label class="form-label">클라이언트</label>
+                            <select class="form-select" @bind="selectedClientId">
+                                <option value="">전체 클라이언트</option>
+                                @foreach (var client in clients)
+                                {
+                                    <option value="@client.Id">@client.CompanyName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- 프로젝트 유형 필터 -->
+                        <div class="col-md-3">
+                            <label class="form-label">유형</label>
+                            <select class="form-select" @bind="selectedProjectType">
+                                <option value="">전체 유형</option>
+                                <option value="@ProjectType.Fixed">고정가</option>
+                                <option value="@ProjectType.TimeAndMaterial">시간당</option>
+                                <option value="@ProjectType.Retainer">유지보수</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button class="btn btn-outline-primary me-2" @onclick="ApplyFilters">
+                                <i class="fas fa-filter me-1"></i>필터 적용
+                            </button>
+                            <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                                <i class="fas fa-times me-1"></i>필터 초기화
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">전체 프로젝트</h6>
+                            <h3 class="mb-0">@projects.Count</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-project-diagram fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">활성 프로젝트</h6>
+                            <h3 class="mb-0">@projects.Count(p => p.Status == ProjectStatus.Active)</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-play-circle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">총 예산</h6>
+                            <h3 class="mb-0">@(projects.Sum(p => p.Budget).ToString("N0"))만원</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-dollar-sign fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">평균 수익률</h6>
+                            <h3 class="mb-0">@(projects.Any() ? projects.Average(p => p.ProfitMargin).ToString("F1") : "0")%</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📋 Project Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">프로젝트 목록</h5>
+                    <div class="d-flex align-items-center">
+                        <small class="text-muted me-3">총 @@filteredProjects.Count개</small>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" @onclick="RefreshData">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if (isLoading)
+                    {
+                        <LoadingSpinner />
+                    }
+                    else if (!filteredProjects.Any())
+                    {
+                        <div class="text-center py-5">
+                            <i class="fas fa-project-diagram fa-3x text-muted mb-3"></i>
+                            <h5>프로젝트가 없습니다</h5>
+                            <p class="text-muted">새로운 프로젝트를 추가해보세요.</p>
+                            <button class="btn btn-primary" @onclick="NavigateToCreate">
+                                <i class="fas fa-plus me-2"></i>첫 번째 프로젝트 추가
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>프로젝트</th>
+                                        <th>클라이언트</th>
+                                        <th>상태</th>
+                                        <th>유형</th>
+                                        <th>기간</th>
+                                        <th>예산</th>
+                                        <th>수익률</th>
+                                        <th>팀</th>
+                                        <th class="text-center">작업</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var project in GetPagedProjects())
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div>
+                                                    <div class="fw-semibold">@project.Name</div>
+                                                    <small class="text-muted">@project.ProjectCode</small>
+                                                    @if (!string.IsNullOrEmpty(project.Description))
+                                                    {
+                                                        <br>
+                                                        <small class="text-muted">@TruncateText(project.Description, 50)</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <span class="fw-semibold">@project.ClientName</span>
+                                                    @if (project.ClientId != Guid.Empty)
+                                                    {
+                                                        <br>
+                                                        <small class="text-muted">고객 ID: @project.ClientId.ToString().Substring(0, 8)...</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetStatusBadgeClass(project.Status)">
+                                                    @GetStatusText(project.Status)
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetProjectTypeBadgeClass(project.ProjectType)">
+                                                    @GetProjectTypeText(project.ProjectType)
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <div>@project.StartDate.ToString("yyyy-MM-dd")</div>
+                                                    @if (project.EndDate.HasValue)
+                                                    {
+                                                        <small class="text-muted">~ @project.EndDate.Value.ToString("yyyy-MM-dd")</small>
+                                                    }
+                                                    else
+                                                    {
+                                                        <small class="text-muted">~ 진행중</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold">@project.Budget.ToString("N0")만원</div>
+                                                @if (project.Status == ProjectStatus.Active)
+                                                {
+                                                    <small class="text-muted">진행률: @GetProjectProgress(project)%</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold @GetProfitMarginClass(project.ProfitMargin)">
+                                                    @project.ProfitMargin.ToString("F1")%
+                                                </div>
+                                                <small class="text-muted">@GetRiskLevelText(project.RiskLevel)</small>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <i class="fas fa-user me-1"></i>@@project.AssignedEmployeesCount명
+                                                    @if (!string.IsNullOrEmpty(project.ManagerName))
+                                                    {
+                                                        <br>
+                                                        <small class="text-muted">PM: @project.ManagerName</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary"
+                                                            @onclick="() => NavigateToDetail(project.Id)"
+                                                            title="상세보기">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-secondary"
+                                                            @onclick="() => NavigateToEdit(project.Id)"
+                                                            title="수정">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-danger"
+                                                            @onclick="() => ConfirmDelete(project)"
+                                                            title="삭제">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 페이징 -->
+                        @if (totalPages > 1)
+                        {
+                            <div class="card-footer">
+                                <nav aria-label="프로젝트 목록 페이징">
+                                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                            <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">이전</button>
+                                        </li>
+
+                                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                                <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                            </li>
+                                        }
+
+                                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                            <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">다음</button>
+                                        </li>
+                                    </ul>
+                                </nav>
+
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        @((currentPage - 1) * pageSize + 1) - @Math.Min(currentPage * pageSize, filteredProjects.Count) / @@filteredProjects.Count개
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // 📊 Data Properties
+    private List<ProjectDto> projects = new();
+    private List<ClientDto> clients = new();
+
+    // 🔍 Filter Properties
+    private string searchTerm = "";
+    private string selectedStatus = "";
+    private string selectedClientId = "";
+    private string selectedProjectType = "";
+
+    // 📄 Pagination Properties
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages => (int)Math.Ceiling((double)filteredProjects.Count / pageSize);
+
+    // 🔄 State Properties
+    private bool isLoading = true;
+
+    // 💡 Computed Properties
+    private List<ProjectDto> filteredProjects
+    {
+        get
+        {
+            var filtered = projects.AsEnumerable();
+
+            // 검색어 필터
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                filtered = filtered.Where(p =>
+                    p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    p.ProjectCode.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // 상태 필터
+            if (!string.IsNullOrEmpty(selectedStatus) && Enum.TryParse<ProjectStatus>(selectedStatus, out var status))
+            {
+                filtered = filtered.Where(p => p.Status == status);
+            }
+
+            // 클라이언트 필터
+            if (!string.IsNullOrEmpty(selectedClientId) && Guid.TryParse(selectedClientId, out var clientId))
+            {
+                filtered = filtered.Where(p => p.ClientId == clientId);
+            }
+
+            // 프로젝트 유형 필터
+            if (!string.IsNullOrEmpty(selectedProjectType) && Enum.TryParse<ProjectType>(selectedProjectType, out var projectType))
+            {
+                filtered = filtered.Where(p => p.ProjectType == projectType);
+            }
+
+            return filtered.OrderByDescending(p => p.StartDate).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 병렬로 데이터 로드
+            var tasks = new[]
+            {
+                LoadProjects(),
+                LoadClients()
+            };
+
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        var response = await ProjectService.GetProjectsAsync(1, 1000); // 전체 로드
+        if (response.Success && response.Data != null)
+        {
+            projects = response.Data.Items;
+        }
+    }
+
+    private async Task LoadClients()
+    {
+        var response = await ClientService.GetClientsAsync(1, 1000);
+        if (response.Success && response.Data != null)
+        {
+            clients = response.Data.Items;
+        }
+    }
+
+    private List<ProjectDto> GetPagedProjects()
+    {
+        return filteredProjects
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private void ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1; // 필터 적용 시 첫 페이지로
+        StateHasChanged();
+    }
+
+    private async Task ClearFilters()
+    {
+        searchTerm = "";
+        selectedStatus = "";
+        selectedClientId = "";
+        selectedProjectType = "";
+        currentPage = 1;
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    // 🧭 Navigation Methods
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/projects/create");
+    }
+
+    private void NavigateToDetail(Guid projectId)
+    {
+        Navigation.NavigateTo($"/projects/{projectId}");
+    }
+
+    private void NavigateToEdit(Guid projectId)
+    {
+        Navigation.NavigateTo($"/projects/{projectId}/edit");
+    }
+
+    // 🗑️ Delete Methods
+    private async Task ConfirmDelete(ProjectDto project)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"'{project.Name}' 프로젝트를 정말 삭제하시겠습니까?");
+
+        if (confirmed)
+        {
+            await DeleteProject(project.Id);
+        }
+    }
+
+    private async Task DeleteProject(Guid projectId)
+    {
+        var success = await ProjectService.DeleteProjectAsync(projectId);
+        if (success)
+        {
+            await LoadProjects(); // 목록 새로고침
+            StateHasChanged();
+        }
+    }
+
+    // 🛠️ Helper Methods
+    private string GetStatusText(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "기획",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetStatusBadgeClass(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "bg-info",
+            ProjectStatus.Active => "bg-success",
+            ProjectStatus.OnHold => "bg-warning",
+            ProjectStatus.Completed => "bg-primary",
+            ProjectStatus.Cancelled => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetProjectTypeText(ProjectType type)
+    {
+        return type switch
+        {
+            ProjectType.Fixed => "고정가",
+            ProjectType.TimeAndMaterial => "시간당",
+            ProjectType.Retainer => "유지보수",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetProjectTypeBadgeClass(ProjectType type)
+    {
+        return type switch
+        {
+            ProjectType.Fixed => "bg-primary",
+            ProjectType.TimeAndMaterial => "bg-success",
+            ProjectType.Retainer => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetRiskLevelText(RiskLevel risk)
+    {
+        return risk switch
+        {
+            RiskLevel.Low => "낮음",
+            RiskLevel.Medium => "보통",
+            RiskLevel.High => "높음",
+            _ => "보통"
+        };
+    }
+
+    private string GetProfitMarginClass(decimal margin)
+    {
+        return margin switch
+        {
+            >= 20 => "text-success",
+            >= 10 => "text-warning",
+            _ => "text-danger"
+        };
+    }
+
+    private int GetProjectProgress(ProjectDto project)
+    {
+        // 간단한 진행률 계산 (실제로는 마일스톤 기반으로 계산)
+        if (project.EndDate.HasValue)
+        {
+            var totalDays = (project.EndDate.Value - project.StartDate).Days;
+            var elapsedDays = (DateTime.Now - project.StartDate).Days;
+            return Math.Min(100, Math.Max(0, (int)((double)elapsedDays / totalDays * 100)));
+        }
+        return 50; // 기본값
+    }
+
+    private string TruncateText(string text, int length)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= length)
+            return text;
+        return text.Substring(0, length) + "...";
+    }
+}

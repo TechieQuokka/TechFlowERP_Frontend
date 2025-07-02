@@ -1,0 +1,336 @@
+@* 모든 공통 컴포넌트의 기본 클래스 *@
+@using Microsoft.AspNetCore.Components
+@using System.ComponentModel
+@implements IDisposable
+
+<div class="base-component @CssClass" id="@ComponentId">
+    @if (IsLoading)
+    {
+        <div class="base-component-loading">
+            @if (LoadingContent != null)
+            {
+                @LoadingContent
+            }
+            else
+            {
+                <div class="d-flex justify-content-center align-items-center" style="height: @LoadingHeight">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">로딩 중...</span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (HasError)
+    {
+        <div class="base-component-error">
+            @if (ErrorContent != null)
+            {
+                @ErrorContent
+            }
+            else
+            {
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    @ErrorMessage
+                    @if (ShowRetryButton)
+                    {
+                        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="OnRetryClick">
+                            다시 시도
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="base-component-content">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// 자식 컴포넌트 내용
+    /// </summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// 추가 CSS 클래스
+    /// </summary>
+    [Parameter] public string CssClass { get; set; } = "";
+
+    /// <summary>
+    /// 로딩 상태 표시 여부
+    /// </summary>
+    [Parameter] public bool IsLoading { get; set; } = false;
+
+    /// <summary>
+    /// 에러 상태 표시 여부
+    /// </summary>
+    [Parameter] public bool HasError { get; set; } = false;
+
+    /// <summary>
+    /// 에러 메시지
+    /// </summary>
+    [Parameter] public string ErrorMessage { get; set; } = "오류가 발생했습니다.";
+
+    /// <summary>
+    /// 다시 시도 버튼 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowRetryButton { get; set; } = true;
+
+    /// <summary>
+    /// 로딩 높이 설정
+    /// </summary>
+    [Parameter] public string LoadingHeight { get; set; } = "200px";
+
+    /// <summary>
+    /// 커스텀 로딩 컨텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? LoadingContent { get; set; }
+
+    /// <summary>
+    /// 커스텀 에러 컨텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? ErrorContent { get; set; }
+
+    /// <summary>
+    /// 다시 시도 버튼 클릭 이벤트
+    /// </summary>
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>
+    /// 컴포넌트 고유 ID
+    /// </summary>
+    protected string ComponentId { get; set; } = Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>
+    /// 컴포넌트 초기화 시간
+    /// </summary>
+    protected DateTime InitializedAt { get; private set; }
+
+    /// <summary>
+    /// 취소 토큰 (비동기 작업 취소용)
+    /// </summary>
+    protected CancellationTokenSource CancellationTokenSource { get; private set; } = new();
+
+    /// <summary>
+    /// 컴포넌트 초기화
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        InitializedAt = DateTime.Now;
+        LogComponentInfo("초기화됨");
+        base.OnInitialized();
+    }
+
+    /// <summary>
+    /// 안전한 상태 변경 호출
+    /// </summary>
+    protected void SafeStateHasChanged()
+    {
+        try
+        {
+            InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "상태 변경 중 오류 발생");
+        }
+    }
+
+    /// <summary>
+    /// 에러 처리
+    /// </summary>
+    protected virtual void HandleError(Exception exception, string context = "")
+    {
+        HasError = true;
+        ErrorMessage = string.IsNullOrEmpty(context)
+            ? exception.Message
+            : $"{context}: {exception.Message}";
+
+        LogComponentInfo($"에러 발생: {ErrorMessage}");
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 에러 상태 클리어
+    /// </summary>
+    protected void ClearError()
+    {
+        HasError = false;
+        ErrorMessage = string.Empty;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 로딩 상태 설정
+    /// </summary>
+    protected void SetLoading(bool loading)
+    {
+        if (IsLoading != loading)
+        {
+            IsLoading = loading;
+            LogComponentInfo($"로딩 상태: {loading}");
+            SafeStateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// 안전한 비동기 실행
+    /// </summary>
+    protected async Task SafeExecuteAsync(Func<Task> action, string context = "")
+    {
+        try
+        {
+            ClearError();
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            LogComponentInfo("작업이 취소됨");
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, context);
+        }
+    }
+
+    /// <summary>
+    /// 안전한 비동기 실행 (반환값 있음)
+    /// </summary>
+    protected async Task<T?> SafeExecuteAsync<T>(Func<Task<T>> action, string context = "")
+    {
+        try
+        {
+            ClearError();
+            return await action();
+        }
+        catch (OperationCanceledException)
+        {
+            LogComponentInfo("작업이 취소됨");
+            return default;
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, context);
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// 디바운싱된 실행 (연속 호출 방지)
+    /// </summary>
+    private readonly Dictionary<string, Timer> _debounceTimers = new();
+
+    protected void DebounceExecute(Action action, int delayMs = 300, string key = "default")
+    {
+        if (_debounceTimers.ContainsKey(key))
+        {
+            _debounceTimers[key].Dispose();
+        }
+
+        _debounceTimers[key] = new Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                action();
+                _debounceTimers.Remove(key);
+            });
+        }, null, delayMs, Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// CSS 클래스 결합 유틸리티
+    /// </summary>
+    protected static string CombineCssClasses(params string?[] classes)
+    {
+        return string.Join(" ", classes.Where(c => !string.IsNullOrWhiteSpace(c)));
+    }
+
+    /// <summary>
+    /// 조건부 CSS 클래스
+    /// </summary>
+    protected static string ConditionalCssClass(bool condition, string trueClass, string falseClass = "")
+    {
+        return condition ? trueClass : falseClass;
+    }
+
+    /// <summary>
+    /// 다시 시도 버튼 클릭 처리
+    /// </summary>
+    private async Task OnRetryClick()
+    {
+        LogComponentInfo("다시 시도 버튼 클릭");
+        if (OnRetry.HasDelegate)
+        {
+            await OnRetry.InvokeAsync();
+        }
+    }
+
+    /// <summary>
+    /// 컴포넌트 정보 디버그 출력
+    /// </summary>
+    protected void LogComponentInfo(string message = "")
+    {
+#if DEBUG
+        var info = $"[{ComponentId}] {GetType().Name}";
+        if (!string.IsNullOrEmpty(message))
+            info += $": {message}";
+
+        Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {info}");
+#endif
+    }
+
+    /// <summary>
+    /// 리소스 정리
+    /// </summary>
+    public virtual void Dispose()
+    {
+        LogComponentInfo("정리됨");
+
+        // 디바운스 타이머 정리
+        foreach (var timer in _debounceTimers.Values)
+        {
+            timer?.Dispose();
+        }
+        _debounceTimers.Clear();
+
+        // 취소 토큰 정리
+        CancellationTokenSource?.Cancel();
+        CancellationTokenSource?.Dispose();
+
+        GC.SuppressFinalize(this);
+    }
+}
+
+<style>
+    .base-component {
+        position: relative;
+    }
+
+    .base-component-loading {
+        min-height: 100px;
+    }
+
+    .base-component-error {
+        margin: 1rem 0;
+    }
+
+    .base-component-content {
+        /* 컨텐츠 영역 스타일 */
+    }
+
+    /* 디버그 모드에서 컴포넌트 경계 표시 */
+    @@media (prefers-color-scheme: dark) {
+        .base-component
+
+    {
+        /* 다크 테마 지원 */
+    }
+
+    }
+</style>

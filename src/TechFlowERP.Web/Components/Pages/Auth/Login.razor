@@ -1,0 +1,239 @@
+﻿@page "/login"
+@using TechFlowERP.Models.DTOs.Auth
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Web.Authentication
+@inject IAuthService AuthService
+@inject CustomAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@attribute [Layout(typeof(TechFlowERP.Web.Components.Layout.LoginLayout))]
+
+<PageTitle>로그인 - TechFlowERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="login-container">
+    <MudPaper Class="pa-8" Elevation="4" Style="margin-top: 10vh;">
+        @* 🏢 로고 및 제목 *@
+        <div class="d-flex flex-column align-center mb-6">
+            <MudIcon Icon="Icons.Material.Filled.Business"
+                     Color="Color.Primary"
+                     Size="Size.Large"
+                     Class="mb-3" />
+            <MudText Typo="Typo.h4" Color="Color.Primary" Class="mb-2">
+                TechFlowERP
+            </MudText>
+            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                IT 서비스 관리 시스템에 로그인하세요
+            </MudText>
+        </div>
+
+        @* 🔐 로그인 폼 *@
+        <EditForm Model="@_loginRequest" OnValidSubmit="@HandleLogin">
+            <DataAnnotationsValidator />
+
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_loginRequest.Email"
+                                  Label="이메일"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="Icons.Material.Filled.Email"
+                                  Required="true"
+                                  ErrorText="@GetValidationError(nameof(_loginRequest.Email))"
+                                  Class="mb-3" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_loginRequest.Password"
+                                  Label="비밀번호"
+                                  Variant="Variant.Outlined"
+                                  InputType="@(_showPassword? InputType.Text: InputType.Password)"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showPassword? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="@TogglePasswordVisibility"
+                                  Required="true"
+                                  ErrorText="@GetValidationError(nameof(_loginRequest.Password))"
+                                  Class="mb-3" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    @* ✅ 수정된 MudCheckBox *@
+                    <MudCheckBox @bind-Value="_loginRequest.RememberMe"
+                                 Label="로그인 상태 유지"
+                                 Color="Color.Primary"
+                                 Class="mb-3" />
+                </MudItem>
+
+                @* ⚠️ 오류 메시지 표시 *@
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Error" Class="mb-3">
+                            @_errorMessage
+                        </MudAlert>
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudButton ButtonType="ButtonType.Submit"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Size="Size.Large"
+                               FullWidth="true"
+                               Disabled="@_isLoading"
+                               Class="py-3">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Class="mr-3" Size="Size.Small" Indeterminate="true" />
+                            <span>로그인 중...</span>
+                        }
+                        else
+                        {
+                            <span>로그인</span>
+                        }
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+
+        @* 🔗 추가 링크들 *@
+        <div class="d-flex justify-center mt-4">
+            <MudLink Href="/forgot-password" Color="Color.Primary">
+                비밀번호를 잊으셨나요?
+            </MudLink>
+        </div>
+
+        @* 🧪 개발용 테스트 계정 (개발 환경에서만 표시) *@
+        @if (_isDevelopment)
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center mb-2">
+                개발용 테스트 계정
+            </MudText>
+            <div class="d-flex gap-2">
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           Color="Color.Secondary"
+                           OnClick="@(() => SetTestAccount("admin"))">
+                    관리자
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           Color="Color.Secondary"
+                           OnClick="@(() => SetTestAccount("manager"))">
+                    매니저
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           Color="Color.Secondary"
+                           OnClick="@(() => SetTestAccount("employee"))">
+                    직원
+                </MudButton>
+            </div>
+        }
+    </MudPaper>
+</MudContainer>
+
+<style>
+    .login-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+@code {
+    private LoginRequestDto _loginRequest = new();
+    private bool _showPassword = false;
+    private bool _isLoading = false;
+    private string _errorMessage = string.Empty;
+    private bool _isDevelopment = false;
+
+    protected override void OnInitialized()
+    {
+        // 개발 환경 확인
+        _isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+    }
+
+    /// <summary>
+    /// 로그인 처리
+    /// </summary>
+    private async Task HandleLogin()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = string.Empty;
+
+            var response = await AuthService.LoginAsync(_loginRequest);
+
+            if (response.Success && response.User != null)
+            {
+                // 인증 상태 업데이트
+                await AuthStateProvider.MarkUserAsAuthenticated(
+                    response.User, response.Token, response.RefreshToken);
+
+                // 성공 메시지
+                ToastService.ShowSuccess($"환영합니다, {response.User.Name}님!");
+
+                // 메인 페이지로 리다이렉트
+                Navigation.NavigateTo("/", true);
+            }
+            else
+            {
+                _errorMessage = response.Message;
+                ToastService.ShowError(_errorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "로그인 중 오류가 발생했습니다.";
+            ToastService.ShowError(_errorMessage);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// 비밀번호 표시/숨김 토글
+    /// </summary>
+    private void TogglePasswordVisibility()
+    {
+        _showPassword = !_showPassword;
+    }
+
+    /// <summary>
+    /// 유효성 검증 오류 메시지 가져오기
+    /// </summary>
+    private string GetValidationError(string fieldName)
+    {
+        // 실제 유효성 검증은 DataAnnotationsValidator가 처리
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// 테스트 계정 설정 (개발용)
+    /// </summary>
+    private void SetTestAccount(string role)
+    {
+        switch (role)
+        {
+            case "admin":
+                _loginRequest.Email = "admin@techflow.com";
+                _loginRequest.Password = "admin123";
+                break;
+            case "manager":
+                _loginRequest.Email = "manager@techflow.com";
+                _loginRequest.Password = "manager123";
+                break;
+            case "employee":
+                _loginRequest.Email = "employee@techflow.com";
+                _loginRequest.Password = "employee123";
+                break;
+        }
+    }
+}

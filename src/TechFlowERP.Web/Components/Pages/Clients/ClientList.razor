@@ -1,0 +1,458 @@
+﻿@page "/clients"
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Shared.Components
+@using MudBlazor
+@inherits TechFlowERP.Shared.Components.BaseComponent
+
+<PageTitle>클라이언트 목록 - TechFlow ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False">
+    <!-- 페이지 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="mb-1">👥 클라이언트 관리</h3>
+            <p class="text-muted mb-0">고객사 정보를 관리합니다</p>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="Icons.Material.Filled.Add"
+                   Href="/clients/create">
+            클라이언트 추가
+        </MudButton>
+    </div>
+
+    <!-- 검색 및 필터 -->
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="SearchTerm"
+                              Label="검색"
+                              Placeholder="회사명, 담당자명으로 검색"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="Icons.Material.Filled.Search"
+                              @onkeydown="@OnSearchKeyDown"
+                              Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="SelectedIndustry"
+                           Label="업종"
+                           Clearable="true">
+                    <MudSelectItem Value="@("")">전체</MudSelectItem>
+                    @foreach (var industry in Industries)
+                    {
+                        <MudSelectItem Value="@industry">@industry</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="SelectedSizeCategory"
+                           Label="규모"
+                           Clearable="true">
+                    <MudSelectItem Value="@((CompanySizeCategory?)null)">전체</MudSelectItem>
+                    <MudSelectItem Value="@CompanySizeCategory.Small">소규모</MudSelectItem>
+                    <MudSelectItem Value="@CompanySizeCategory.Medium">중간규모</MudSelectItem>
+                    <MudSelectItem Value="@CompanySizeCategory.Large">대규모</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="Icons.Material.Filled.FilterList"
+                           OnClick="@ApplyFilters"
+                           FullWidth="true">
+                    필터 적용
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- 데이터 테이블 -->
+    <BaseComponent IsLoading="@IsLoading"
+                   HasError="@HasError"
+                   ErrorMessage="@ErrorMessage"
+                   OnRetry="@LoadClientsAsync">
+
+        <MudDataGrid @ref="dataGrid"
+                     Items="@FilteredClients"
+                     Filterable="false"
+                     SortMode="SortMode.Multiple"
+                     Groupable="false"
+                     Hover="true"
+                     RowsPerPage="@PageSize"
+                     CurrentPage="@CurrentPage"
+                     Dense="false">
+
+            <Columns>
+                <PropertyColumn Property="x => x.CompanyName"
+                                Title="회사명"
+                                Sortable="true">
+                    <CellTemplate>
+                        <div class="d-flex align-items-center">
+                            <MudIcon Icon="Icons.Material.Filled.Business"
+                                     Size="Size.Small"
+                                     Class="me-2 text-muted" />
+                            <strong>@context.Item.CompanyName</strong>
+                        </div>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn Property="x => x.Industry"
+                                Title="업종"
+                                Sortable="true">
+                    <CellTemplate>
+                        <MudChip Size="Size.Small"
+                                 Color="Color.Info"
+                                 Variant="Variant.Text">
+                            @context.Item.Industry
+                        </MudChip>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn Property="x => x.SizeCategory"
+                                Title="규모"
+                                Sortable="true">
+                    <CellTemplate>
+                        <MudChip Size="Size.Small"
+                                 Color="@GetSizeColor(context.Item.SizeCategory)"
+                                 Variant="Variant.Filled">
+                            @GetSizeDisplayName(context.Item.SizeCategory)
+                        </MudChip>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn Property="x => x.ContactPerson"
+                                Title="담당자"
+                                Sortable="true">
+                    <CellTemplate>
+                        <div>
+                            <div>@context.Item.ContactPerson</div>
+                            <small class="text-muted">@context.Item.ContactEmail</small>
+                        </div>
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <PropertyColumn Property="x => x.ContactPhone"
+                                Title="연락처"
+                                Sortable="false" />
+
+                <PropertyColumn Property="x => x.ContractValue"
+                                Title="계약금액"
+                                Sortable="true">
+                    <CellTemplate>
+                        @if (context.Item.ContractValue > 0)
+                        {
+                            <div class="text-end">
+                                <strong class="text-success">
+                                    $@context.Item.ContractValue.ToString("N0")
+                                </strong>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </CellTemplate>
+                </PropertyColumn>
+
+                <TemplateColumn Title="액션" Sortable="false">
+                    <CellTemplate>
+                        <div class="d-flex gap-1">
+                            <MudIconButton Icon="Icons.Material.Filled.Visibility"
+                                           Size="Size.Small"
+                                           Color="Color.Info"
+                                           OnClick="@(() => ViewClient(context.Item.Id.ToString()))"
+                                           Title="상세보기" />
+                            <MudIconButton Icon="Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="Color.Warning"
+                                           OnClick="@(() => EditClient(context.Item.Id.ToString()))"
+                                           Title="수정" />
+                            <MudIconButton Icon="Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => DeleteClientAsync(context.Item))"
+                                           Title="삭제" />
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+
+            <PagerContent>
+                <MudDataGridPager T="ClientDto"
+                                  PageSizeOptions="@PageSizeOptions"
+                                  RowsPerPageString="페이지당 행 수:"
+                                  InfoFormat="@InfoFormat" />
+            </PagerContent>
+
+            <NoRecordsContent>
+                <div class="text-center py-5">
+                    <MudIcon Icon="Icons.Material.Filled.BusinessCenter"
+                             Size="Size.Large"
+                             Class="mb-3 text-muted" />
+                    <MudText Typo="Typo.h6" Class="text-muted">
+                        @(string.IsNullOrEmpty(SearchTerm) ? "등록된 클라이언트가 없습니다" : "검색 결과가 없습니다")
+                    </MudText>
+                    @if (string.IsNullOrEmpty(SearchTerm))
+                    {
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="Icons.Material.Filled.Add"
+                                   Href="/clients/create"
+                                   Class="mt-3">
+                            첫 번째 클라이언트 추가
+                        </MudButton>
+                    }
+                </div>
+            </NoRecordsContent>
+        </MudDataGrid>
+
+    </BaseComponent>
+
+    <!-- 통계 카드 -->
+    <MudGrid Class="mt-4">
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-4 text-center">
+                <MudIcon Icon="Icons.Material.Filled.Business"
+                         Size="Size.Large"
+                         Color="Color.Primary" />
+                <MudText Typo="Typo.h4" Class="mt-2">@TotalClients</MudText>
+                <MudText Typo="Typo.body2" Class="text-muted">총 클라이언트</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-4 text-center">
+                <MudIcon Icon="Icons.Material.Filled.AttachMoney"
+                         Size="Size.Large"
+                         Color="Color.Success" />
+                <MudText Typo="Typo.h4" Class="mt-2">$@TotalContractValue.ToString("N0")</MudText>
+                <MudText Typo="Typo.body2" Class="text-muted">총 계약금액</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-4 text-center">
+                <MudIcon Icon="Icons.Material.Filled.TrendingUp"
+                         Size="Size.Large"
+                         Color="Color.Info" />
+                <MudText Typo="Typo.h4" Class="mt-2">@LargeClients</MudText>
+                <MudText Typo="Typo.body2" Class="text-muted">대기업 고객</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudPaper Class="pa-4 text-center">
+                <MudIcon Icon="Icons.Material.Filled.Category"
+                         Size="Size.Large"
+                         Color="Color.Secondary" />
+                <MudText Typo="Typo.h4" Class="mt-2">@UniqueIndustries</MudText>
+                <MudText Typo="Typo.body2" Class="text-muted">업종 수</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    // 데이터 그리드 참조
+    private MudDataGrid<ClientDto>? dataGrid;
+
+    // 데이터
+    private List<ClientDto> Clients = new();
+    private List<ClientDto> FilteredClients = new();
+
+    // 검색 및 필터
+    private string SearchTerm = "";
+    private string SelectedIndustry = "";
+    private CompanySizeCategory? SelectedSizeCategory = null;
+
+    // 페이징
+    private int PageSize = 10;
+    private int CurrentPage = 0;
+    private readonly int[] PageSizeOptions = { 5, 10, 25, 50 };
+    private readonly string InfoFormat = "{first_item}-{last_item} of {all_items}";
+
+    // 업종 목록 (실제로는 API에서 가져올 예정)
+    private readonly List<string> Industries = new()
+    {
+        "IT/소프트웨어", "제조업", "금융업", "유통업", "건설업",
+        "의료/헬스케어", "교육", "미디어/엔터테인먼트", "기타"
+    };
+
+    // 통계
+    private int TotalClients => Clients.Count;
+    private decimal TotalContractValue => Clients.Where(c => c.ContractValue > 0).Sum(c => c.ContractValue);
+    private int LargeClients => Clients.Count(c => c.SizeCategory == CompanySizeCategory.Large);
+    private int UniqueIndustries => Clients.Select(c => c.Industry).Distinct().Count();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientsAsync();
+    }
+
+    private async Task LoadClientsAsync()
+    {
+        try
+        {
+            SetLoading(true);
+
+            // TODO: 실제 API 호출로 교체
+            await Task.Delay(1000); // 시뮬레이션
+            Clients = GetSampleClients();
+            FilteredClients = Clients;
+
+            LogComponentInfo($"클라이언트 {Clients.Count}개 로드됨");
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "클라이언트 목록 로딩 실패");
+        }
+        finally
+        {
+            SetLoading(false);
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        FilteredClients = Clients.Where(client =>
+            (string.IsNullOrEmpty(SearchTerm) ||
+             client.CompanyName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+             client.ContactPerson?.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) == true) &&
+            (string.IsNullOrEmpty(SelectedIndustry) ||
+             client.Industry?.Equals(SelectedIndustry, StringComparison.OrdinalIgnoreCase) == true) &&
+            (SelectedSizeCategory == null || client.SizeCategory == SelectedSizeCategory)
+        ).ToList();
+
+        LogComponentInfo($"필터 적용: {FilteredClients.Count}/{Clients.Count}개 표시");
+        StateHasChanged();
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+        }
+    }
+
+    private void ViewClient(string clientId)
+    {
+        // TODO: 네비게이션 서비스 사용
+        LogComponentInfo($"클라이언트 상세보기: {clientId}");
+        // NavigationManager.NavigateTo($"/clients/{clientId}");
+    }
+
+    private void EditClient(string clientId)
+    {
+        LogComponentInfo($"클라이언트 수정: {clientId}");
+        // NavigationManager.NavigateTo($"/clients/edit/{clientId}");
+    }
+
+    private async Task DeleteClientAsync(ClientDto client)
+    {
+        // TODO: 삭제 확인 다이얼로그 표시
+        LogComponentInfo($"클라이언트 삭제 요청: {client.CompanyName}");
+
+        // 샘플 삭제 (실제로는 API 호출)
+        Clients.Remove(client);
+        ApplyFilters();
+    }
+
+    private Color GetSizeColor(CompanySizeCategory sizeCategory)
+    {
+        return sizeCategory switch
+        {
+            CompanySizeCategory.Small => Color.Success,
+            CompanySizeCategory.Medium => Color.Warning,
+            CompanySizeCategory.Large => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private string GetSizeDisplayName(CompanySizeCategory sizeCategory)
+    {
+        return sizeCategory switch
+        {
+            CompanySizeCategory.Small => "소규모",
+            CompanySizeCategory.Medium => "중간규모",
+            CompanySizeCategory.Large => "대규모",
+            _ => "미정"
+        };
+    }
+
+    // 샘플 데이터 생성 (나중에 제거)
+    private List<ClientDto> GetSampleClients()
+    {
+        return new List<ClientDto>
+        {
+            new() {
+                Id = Guid.NewGuid(),
+                CompanyName = "네이버 클라우드",
+                Industry = "IT/소프트웨어",
+                SizeCategory = CompanySizeCategory.Large,
+                ContactPerson = "김기술",
+                ContactEmail = "kim@navercorp.com",
+                ContactPhone = "02-1234-5678",
+                ContractValue = 500000,
+                Address = "경기도 성남시 분당구",
+                ActiveProjectsCount = 3,
+                TotalRevenue = 1500000,
+                LastProjectDate = DateTime.Now.AddDays(-30)
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                CompanyName = "삼성전자",
+                Industry = "제조업",
+                SizeCategory = CompanySizeCategory.Large,
+                ContactPerson = "이개발",
+                ContactEmail = "lee@samsung.com",
+                ContactPhone = "02-2345-6789",
+                ContractValue = 1200000,
+                Address = "경기도 수원시",
+                ActiveProjectsCount = 5,
+                TotalRevenue = 5000000,
+                LastProjectDate = DateTime.Now.AddDays(-15)
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                CompanyName = "스타트업코리아",
+                Industry = "IT/소프트웨어",
+                SizeCategory = CompanySizeCategory.Small,
+                ContactPerson = "박창업",
+                ContactEmail = "park@startup.co.kr",
+                ContactPhone = "070-1234-5678",
+                ContractValue = 80000,
+                Address = "서울시 강남구",
+                ActiveProjectsCount = 1,
+                TotalRevenue = 150000,
+                LastProjectDate = DateTime.Now.AddDays(-60)
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                CompanyName = "현대모비스",
+                Industry = "제조업",
+                SizeCategory = CompanySizeCategory.Large,
+                ContactPerson = "정자동차",
+                ContactEmail = "jung@mobis.co.kr",
+                ContactPhone = "031-1234-5678",
+                ContractValue = 800000,
+                Address = "경기도 용인시",
+                ActiveProjectsCount = 2,
+                TotalRevenue = 2400000,
+                LastProjectDate = DateTime.Now.AddDays(-45)
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                CompanyName = "KB국민은행",
+                Industry = "금융업",
+                SizeCategory = CompanySizeCategory.Large,
+                ContactPerson = "최금융",
+                ContactEmail = "choi@kb.co.kr",
+                ContactPhone = "02-9876-5432",
+                ContractValue = 650000,
+                Address = "서울시 중구",
+                ActiveProjectsCount = 4,
+                TotalRevenue = 3200000,
+                LastProjectDate = DateTime.Now.AddDays(-10)
+            }
+        };
+    }
+}

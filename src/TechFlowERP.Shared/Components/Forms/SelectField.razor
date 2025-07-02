@@ -1,0 +1,199 @@
+@using MudBlazor
+@typeparam T
+
+<FormField Label="@Label"
+           Required="@Required"
+           HelperText="@HelperText"
+           ErrorText="@ErrorText"
+           Tooltip="@Tooltip"
+           FullWidth="@FullWidth"
+           Disabled="@Disabled"
+           Class="@Class">
+
+    <MudSelect @bind-Value="@_selectedValue"
+               Variant="@Variant"
+               Color="@Color"
+               Dense="@Dense"
+               Margin="@Margin"
+               Disabled="@Disabled"
+               ReadOnly="@ReadOnly"
+               Required="@Required"
+               MultiSelection="@MultiSelection"
+               Clearable="@Clearable"
+               Placeholder="@Placeholder"
+               AnchorOrigin="@AnchorOrigin"
+               TransformOrigin="@TransformOrigin"
+               T="T">
+
+        @if (Items != null)
+        {
+            @foreach (var item in Items)
+            {
+                <MudSelectItem Value="@item">
+                    @if (ItemTemplate != null)
+                    {
+                        @ItemTemplate(item)
+                    }
+                    else
+                    {
+                        @GetDisplayText(item)
+                    }
+                </MudSelectItem>
+            }
+        }
+
+        @if (ChildContent != null)
+        {
+            @ChildContent
+        }
+    </MudSelect>
+</FormField>
+
+@code {
+    private T? _selectedValue;
+
+    /// <summary>
+    /// 선택된 값
+    /// </summary>
+    [Parameter]
+    public T? Value
+    {
+        get => _selectedValue;
+        set
+        {
+            if (!EqualityComparer<T>.Default.Equals(_selectedValue, value))
+            {
+                _selectedValue = value;
+                ValueChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 값 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<T?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// 선택 가능한 항목들
+    /// </summary>
+    [Parameter] public IEnumerable<T>? Items { get; set; }
+
+    /// <summary>
+    /// 항목 표시 템플릿
+    /// </summary>
+    [Parameter] public RenderFragment<T>? ItemTemplate { get; set; }
+
+    /// <summary>
+    /// 항목 텍스트 추출 함수
+    /// </summary>
+    [Parameter] public Func<T, string>? ToStringFunc { get; set; }
+
+    /// <summary>
+    /// 라벨
+    /// </summary>
+    [Parameter] public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 플레이스홀더
+    /// </summary>
+    [Parameter] public string Placeholder { get; set; } = "선택하세요";
+
+    /// <summary>
+    /// 필수 입력 여부
+    /// </summary>
+    [Parameter] public bool Required { get; set; } = false;
+
+    /// <summary>
+    /// 도움말 텍스트
+    /// </summary>
+    [Parameter] public string HelperText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 오류 텍스트
+    /// </summary>
+    [Parameter] public string ErrorText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 툴팁 텍스트
+    /// </summary>
+    [Parameter] public string Tooltip { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 다중 선택 가능 여부
+    /// </summary>
+    [Parameter] public bool MultiSelection { get; set; } = false;
+
+    /// <summary>
+    /// 지우기 버튼 표시 여부
+    /// </summary>
+    [Parameter] public bool Clearable { get; set; } = true;
+
+    /// <summary>
+    /// 비활성화 여부
+    /// </summary>
+    [Parameter] public bool Disabled { get; set; } = false;
+
+    /// <summary>
+    /// 읽기 전용 여부
+    /// </summary>
+    [Parameter] public bool ReadOnly { get; set; } = false;
+
+    /// <summary>
+    /// 조밀한 표시 여부
+    /// </summary>
+    [Parameter] public bool Dense { get; set; } = false;
+
+    /// <summary>
+    /// 전체 너비 사용 여부
+    /// </summary>
+    [Parameter] public bool FullWidth { get; set; } = true;
+
+    /// <summary>
+    /// 컴포넌트 변형
+    /// </summary>
+    [Parameter] public Variant Variant { get; set; } = Variant.Outlined;
+
+    /// <summary>
+    /// 색상
+    /// </summary>
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+
+    /// <summary>
+    /// 여백
+    /// </summary>
+    [Parameter] public Margin Margin { get; set; } = Margin.None;
+
+    /// <summary>
+    /// 앵커 원점
+    /// </summary>
+    [Parameter] public Origin AnchorOrigin { get; set; } = Origin.TopLeft;
+
+    /// <summary>
+    /// 변환 원점
+    /// </summary>
+    [Parameter] public Origin TransformOrigin { get; set; } = Origin.TopLeft;
+
+    /// <summary>
+    /// 추가 CSS 클래스
+    /// </summary>
+    [Parameter] public string Class { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 자식 콘텐츠 (MudSelectItem들)
+    /// </summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// 항목의 표시 텍스트 가져오기
+    /// </summary>
+    private string GetDisplayText(T item)
+    {
+        if (item == null) return string.Empty;
+
+        if (ToStringFunc != null)
+            return ToStringFunc(item);
+
+        return item.ToString() ?? string.Empty;
+    }
+}

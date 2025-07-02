@@ -1,0 +1,705 @@
+﻿@page "/projects/{ProjectId:guid}"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.TimeEntry
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject IProjectService ProjectService
+@inject IEmployeeService EmployeeService
+@inject ITimeEntryService TimeEntryService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProjectDetail> Logger
+
+<PageTitle>프로젝트 상세 - @(project?.Name ?? "로딩중...")</PageTitle>
+
+<div class="container-fluid">
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (project == null)
+    {
+        <div class="text-center py-5">
+            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+            <h4>프로젝트를 찾을 수 없습니다</h4>
+            <p class="text-muted">요청하신 프로젝트가 존재하지 않거나 삭제되었을 수 있습니다.</p>
+            <button class="btn btn-primary" @onclick="@(() => Navigation.NavigateTo("/projects"))">
+                프로젝트 목록으로 돌아가기
+            </button>
+        </div>
+    }
+    else
+    {
+        <!-- 📊 Header Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/projects" class="text-decoration-none">프로젝트</a>
+                                </li>
+                                <li class="breadcrumb-item active">@project.Name</li>
+                            </ol>
+                        </nav>
+                        <h2 class="mb-1">
+                            <i class="fas fa-project-diagram me-2"></i>@project.Name
+                        </h2>
+                        <div class="d-flex align-items-center gap-3 mb-2">
+                            <span class="badge @GetStatusBadgeClass() fs-6">@GetStatusText()</span>
+                            @if (!string.IsNullOrEmpty(project.ProjectCode))
+                            {
+                                <span class="text-muted">@project.ProjectCode</span>
+                            }
+                            @if (!string.IsNullOrEmpty(project.ClientName))
+                            {
+                                <span class="badge bg-light text-dark">@project.ClientName</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(project.Description))
+                        {
+                            <p class="text-muted mb-0">@project.Description</p>
+                        }
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary" @onclick="EditProject">
+                            <i class="fas fa-edit me-1"></i>수정
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="RefreshData">
+                            <i class="fas fa-sync me-1"></i>새로고침
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 Project Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title mb-1">총 예산</h6>
+                                <h4 class="mb-0">@GetBudgetDisplay()</h4>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-dollar-sign fa-2x opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title mb-1">사용된 시간</h6>
+                                <h4 class="mb-0">@totalHours.ToString("F1")h</h4>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-clock fa-2x opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title mb-1">팀 멤버</h6>
+                                <h4 class="mb-0">@@assignments.Count명</h4>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-users fa-2x opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title mb-1">진행률</h6>
+                                <h4 class="mb-0">@GetProgressPercentage()%</h4>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-chart-pie fa-2x opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📋 Project Details Tabs -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link @(activeTab == "overview" ? "active" : "")"
+                                        @onclick="@(() => SetActiveTab("overview"))">
+                                    <i class="fas fa-info-circle me-1"></i>개요
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link @(activeTab == "team" ? "active" : "")"
+                                        @onclick="@(() => SetActiveTab("team"))">
+                                    <i class="fas fa-users me-1"></i>팀 멤버 (@assignments.Count)
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link @(activeTab == "timesheet" ? "active" : "")"
+                                        @onclick="@(() => SetActiveTab("timesheet"))">
+                                    <i class="fas fa-clock me-1"></i>시간 기록
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        @if (activeTab == "overview")
+                        {
+                            <!-- 📋 Overview Tab -->
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h6 class="mb-3">프로젝트 정보</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>프로젝트 코드:</strong></div>
+                                        <div class="col-sm-8">@(project.ProjectCode ?? "미설정")</div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>클라이언트:</strong></div>
+                                        <div class="col-sm-8">
+                                            @if (!string.IsNullOrEmpty(project.ClientName))
+                                            {
+                                                <span>@project.ClientName</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">미지정</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>프로젝트 유형:</strong></div>
+                                        <div class="col-sm-8">@GetProjectTypeText()</div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>시작일:</strong></div>
+                                        <div class="col-sm-8">@project.StartDate.ToString("yyyy-MM-dd")</div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>종료일:</strong></div>
+                                        <div class="col-sm-8">
+                                            @if (project.EndDate.HasValue)
+                                            {
+                                                @project.EndDate.Value.ToString("yyyy-MM-dd")
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">미정</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>예산:</strong></div>
+                                        <div class="col-sm-8">
+                                            <strong class="text-success">@GetBudgetDisplay()</strong>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>수익률:</strong></div>
+                                        <div class="col-sm-8">
+                                            @if (project.ProfitMargin > 0)
+                                            {
+                                                <span class="badge bg-info">@project.ProfitMargin.ToString("F1")%</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">미설정</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-4"><strong>위험도:</strong></div>
+                                        <div class="col-sm-8">
+                                            <span class="badge @GetRiskBadgeClass()">@GetRiskLevelText()</span>
+                                        </div>
+                                    </div>
+
+                                    @if (!string.IsNullOrEmpty(project.Description))
+                                    {
+                                        <h6 class="mt-4 mb-3">프로젝트 설명</h6>
+                                        <div class="border rounded p-3 bg-light">
+                                            @project.Description
+                                        </div>
+                                    }
+                                </div>
+                                <div class="col-md-4">
+                                    <h6 class="mb-3">기술 스택</h6>
+                                    @if (GetTechnologies().Any())
+                                    {
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach (var tech in GetTechnologies())
+                                            {
+                                                <span class="badge bg-primary">@tech</span>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">기술 스택이 등록되지 않았습니다.</p>
+                                    }
+
+                                    <h6 class="mt-4 mb-3">프로젝트 매니저</h6>
+                                    @if (!string.IsNullOrEmpty(project.ManagerName))
+                                    {
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                <span class="text-white fw-bold">@GetInitials(project.ManagerName)</span>
+                                            </div>
+                                            <div>
+                                                <div class="fw-semibold">@project.ManagerName</div>
+                                                <small class="text-muted">프로젝트 매니저</small>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">매니저가 지정되지 않았습니다.</p>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "team")
+                        {
+                            <!-- 👥 Team Tab -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">팀 멤버 관리</h6>
+                                <button class="btn btn-sm btn-primary" @onclick="ShowAddMemberModal">
+                                    <i class="fas fa-plus me-1"></i>멤버 추가
+                                </button>
+                            </div>
+
+                            @if (assignments.Any())
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>멤버</th>
+                                                <th>역할</th>
+                                                <th>할당률</th>
+                                                <th>시급</th>
+                                                <th>기간</th>
+                                                <th>총 시간</th>
+                                                <th>작업</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var assignment in assignments)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="avatar-sm bg-info rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                                <span class="text-white fw-bold">@GetInitials(assignment.EmployeeName ?? "?")</span>
+                                                            </div>
+                                                            <div>
+                                                                <div class="fw-semibold">@(assignment.EmployeeName ?? "알 수 없음")</div>
+                                                                <small class="text-muted">직원</small>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrEmpty(assignment.Role))
+                                                        {
+                                                            <span class="badge bg-secondary">@assignment.Role</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">미지정</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">@assignment.AllocationPercentage%</span>
+                                                    </td>
+                                                    <td>
+                                                        @if (assignment.HourlyRate > 0)
+                                                        {
+                                                            <span class="fw-semibold">@assignment.HourlyRate.ToString("C0")</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">미설정</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <div>@assignment.StartDate.ToString("MM/dd")</div>
+                                                        @if (assignment.EndDate.HasValue)
+                                                        {
+                                                            <small class="text-muted">~ @assignment.EndDate.Value.ToString("MM/dd")</small>
+                                                        }
+                                                        else
+                                                        {
+                                                            <small class="text-muted">~ 진행중</small>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-primary">@GetMemberTotalHours(assignment.EmployeeId).ToString("F1")h</span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="btn-group btn-group-sm">
+                                                            <button class="btn btn-outline-primary"
+                                                                    @onclick="() => EditAssignment(assignment)"
+                                                                    title="수정">
+                                                                <i class="fas fa-edit"></i>
+                                                            </button>
+                                                            <button class="btn btn-outline-danger"
+                                                                    @onclick="() => RemoveAssignment(assignment.Id)"
+                                                                    title="제거">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4">
+                                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                                    <h6 class="text-muted">할당된 팀 멤버가 없습니다</h6>
+                                    <button class="btn btn-primary" @onclick="ShowAddMemberModal">
+                                        <i class="fas fa-plus me-1"></i>첫 번째 멤버 추가
+                                    </button>
+                                </div>
+                            }
+                        }
+                        else if (activeTab == "timesheet")
+                        {
+                            <!-- ⏰ Timesheet Tab -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">시간 기록</h6>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" @onclick="@(() => Navigation.NavigateTo("/timesheet"))">
+                                        <i class="fas fa-calendar me-1"></i>타임시트 보기
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (timeEntries.Any())
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>날짜</th>
+                                                <th>직원</th>
+                                                <th>시간</th>
+                                                <th>청구</th>
+                                                <th>승인</th>
+                                                <th>작업 설명</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var entry in timeEntries.Take(10))
+                                            {
+                                                <tr>
+                                                    <td>@entry.Date.ToString("MM/dd")</td>
+                                                    <td>@(entry.EmployeeName ?? "알 수 없음")</td>
+                                                    <td><span class="badge bg-primary">@entry.Hours.ToString("F1")h</span></td>
+                                                    <td>
+                                                        <span class="badge @(entry.Billable ? "bg-success" : "bg-secondary")">
+                                                            @(entry.Billable ? "청구" : "비청구")
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge @(entry.Approved ? "bg-success" : "bg-warning")">
+                                                            @(entry.Approved ? "승인" : "대기")
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span title="@entry.TaskDescription">
+                                                            @(entry.TaskDescription?.Length > 30 ?
+                                                                                                        entry.TaskDescription.Substring(0, 30) + "..." :
+                                                                                                        entry.TaskDescription)
+                                        </span>
+                                    </td>
+                                </tr>
+                                                                }
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                @if (timeEntries.Count > 10)
+                                {
+                                    <div class="text-center mt-3">
+                                        <small class="text-muted">최근 10개 항목만 표시됨. 전체 기록은 타임시트에서 확인하세요.</small>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="text-center py-4">
+                                    <i class="fas fa-clock fa-3x text-muted mb-3"></i>
+                                    <h6 class="text-muted">등록된 시간 기록이 없습니다</h6>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    // 📊 Main Data
+    private ProjectDto? project;
+    private List<ProjectAssignmentDto> assignments = new();
+    private List<TimeEntryDto> timeEntries = new();
+
+    // 🔄 State
+    private bool isLoading = true;
+    private string activeTab = "overview";
+
+    // 📊 Statistics
+    private decimal totalHours = 0;
+    private decimal billableHours = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await LoadProject();
+            await LoadTimeEntries();
+            CalculateStatistics();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 데이터 로드 중 오류 발생: {ProjectId}", ProjectId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProject()
+    {
+        try
+        {
+            project = await ProjectService.GetProjectByIdAsync(ProjectId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 로드 실패: {ProjectId}", ProjectId);
+        }
+    }
+
+    private async Task LoadTimeEntries()
+    {
+        try
+        {
+            timeEntries = await TimeEntryService.GetTimeEntriesByProjectAsync(ProjectId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "시간 기록 로드 실패: {ProjectId}", ProjectId);
+            timeEntries = new List<TimeEntryDto>();
+        }
+    }
+
+    private void CalculateStatistics()
+    {
+        totalHours = timeEntries.Sum(t => t.Hours);
+        billableHours = timeEntries.Where(t => t.Billable).Sum(t => t.Hours);
+    }
+
+    private void SetActiveTab(string tabName)
+    {
+        activeTab = tabName;
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    // 🎨 UI Helper Methods
+    private string GetStatusBadgeClass()
+    {
+        return project?.Status switch
+        {
+            ProjectStatus.Planning => "bg-secondary",
+            ProjectStatus.Active => "bg-success",
+            ProjectStatus.OnHold => "bg-warning",
+            ProjectStatus.Completed => "bg-primary",
+            ProjectStatus.Cancelled => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusText()
+    {
+        return project?.Status switch
+        {
+            ProjectStatus.Planning => "계획중",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetProjectTypeText()
+    {
+        return project?.ProjectType switch
+        {
+            ProjectType.Fixed => "고정가",
+            ProjectType.TimeAndMaterial => "공수계약",
+            ProjectType.Retainer => "유지보수",
+            _ => "미지정"
+        };
+    }
+
+    private string GetRiskBadgeClass()
+    {
+        return project?.RiskLevel switch
+        {
+            RiskLevel.Low => "bg-success",
+            RiskLevel.Medium => "bg-warning",
+            RiskLevel.High => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetRiskLevelText()
+    {
+        return project?.RiskLevel switch
+        {
+            RiskLevel.Low => "낮음",
+            RiskLevel.Medium => "보통",
+            RiskLevel.High => "높음",
+            _ => "미지정"
+        };
+    }
+
+    private string GetBudgetDisplay()
+    {
+        if (project?.Budget > 0)
+        {
+            return project.Budget.ToString("C0");
+        }
+        return "미설정";
+    }
+
+    private List<string> GetTechnologies()
+    {
+        // Technologies가 JSON이나 문자열로 저장되어 있다면 파싱
+        if (project?.Technologies != null)
+        {
+            return project.Technologies;
+        }
+        return new List<string>();
+    }
+
+    private string GetProgressPercentage()
+    {
+        // 기본적으로 시간 기반 진행률 계산
+        if (project?.Budget > 0 && totalHours > 0)
+        {
+            // 예상 시간 대비 사용 시간으로 계산 (임시)
+            var estimatedHours = (decimal)(project.Budget / 50000); // 시급 5만원 가정
+            var percentage = Math.Min(100, (totalHours / estimatedHours) * 100);
+            return percentage.ToString("F0");
+        }
+        return "0";
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 2)
+        {
+            return $"{words[0][0]}{words[1][0]}".ToUpper();
+        }
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private decimal GetMemberTotalHours(Guid employeeId)
+    {
+        return timeEntries.Where(t => t.EmployeeId == employeeId).Sum(t => t.Hours);
+    }
+
+    // 🔧 Action Methods
+    private void EditProject()
+    {
+        Navigation.NavigateTo($"/projects/{ProjectId}/edit");
+    }
+
+    private void ShowAddMemberModal()
+    {
+        // TODO: 멤버 추가 모달 구현
+        Console.WriteLine("멤버 추가 모달 표시");
+    }
+
+    private void EditAssignment(ProjectAssignmentDto assignment)
+    {
+        // TODO: 할당 수정 모달 구현
+        Console.WriteLine($"할당 수정: {assignment.Id}");
+    }
+
+    private async Task RemoveAssignment(Guid assignmentId)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "이 팀 멤버를 프로젝트에서 제거하시겠습니까?"))
+        {
+            try
+            {
+                // TODO: API 호출 구현
+                Console.WriteLine($"할당 제거: {assignmentId}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "할당 제거 실패: {AssignmentId}", assignmentId);
+            }
+        }
+    }
+}
+
+<style>
+    .avatar-sm {
+        width: 32px;
+        height: 32px;
+    }
+</style>

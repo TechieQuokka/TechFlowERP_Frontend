@@ -1,0 +1,345 @@
+﻿@using MudBlazor
+@typeparam T
+
+<div class="data-table-container">
+    @* 🔍 검색 및 필터 영역 *@
+    @if (ShowSearch || ShowFilters)
+    {
+        <MudCard Class="mb-4" Elevation="1">
+            <MudCardContent>
+                <MudGrid AlignItems="Center">
+                    @if (ShowSearch)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudTextField @bind-Value="@_searchTerm"
+                                          Label="검색"
+                                          Variant="Variant.Outlined"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="Icons.Material.Filled.Search"
+                                          OnKeyPress="@OnSearchKeyPress"
+                                          Clearable="true"
+                                          Class="search-field" />
+                        </MudItem>
+                    }
+                    
+                    @if (FilterContent != null)
+                    {
+                        <MudItem xs="12" md="6">
+                            @FilterContent
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    }
+
+    @* 📊 데이터 테이블 *@
+    <MudCard Elevation="2">
+        <MudCardContent Class="pa-0">
+            <MudTable Items="@_filteredItems"
+                      Dense="@Dense"
+                      Hover="true"
+                      Breakpoint="Breakpoint.Sm"
+                      Loading="@Loading"
+                      LoadingProgressColor="Color.Info"
+                      FixedHeader="@FixedHeader"
+                      Height="@Height"
+                      RowsPerPage="@RowsPerPage"
+                      MultiSelection="@MultiSelection"
+                      @bind-SelectedItems="@_selectedItems"
+                      T="T">
+                
+                <HeaderContent>
+                    @if (MultiSelection)
+                    {
+                        <MudTh Style="width: 50px;">
+                            <MudCheckBox T="bool"
+                                         Checked="@_selectAll"
+                                         TriState="true"
+                                         CheckedChanged="@HandleSelectAllChanged" />
+                        </MudTh>
+                    }
+                    @HeaderContent
+                    @if (ShowActions)
+                    {
+                        <MudTh Style="width: 120px;">작업</MudTh>
+                    }
+                </HeaderContent>
+                
+                <RowTemplate>
+                    @if (MultiSelection)
+                    {
+                        <MudTd Style="width: 50px;">
+                            <MudCheckBox T="bool"
+                                         Checked="@_selectedItems.Contains(context)"
+                                         CheckedChanged="@((bool value) => HandleItemSelectionChanged(context, value))" />
+                        </MudTd>
+                    }
+                    @RowTemplate(context)
+                    @if (ShowActions)
+                    {
+                        <MudTd Style="width: 120px;">
+                            <div class="d-flex gap-2">
+                                @if (ActionContent != null)
+                                {
+                                    @ActionContent(context)
+                                }
+                                else
+                                {
+                                    @* 기본 액션 버튼들 *@
+                                    <MudIconButton Icon="Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => HandleEdit(context))" />
+                                    <MudIconButton Icon="Icons.Material.Filled.Delete"
+                                                   Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => HandleDelete(context))" />
+                                }
+                            </div>
+                        </MudTd>
+                    }
+                </RowTemplate>
+                
+                <NoRecordsContent>
+                    <div class="d-flex flex-column align-center pa-8">
+                        <MudIcon Icon="Icons.Material.Filled.SearchOff" 
+                                 Size="Size.Large" 
+                                 Color="Color.Secondary" />
+                        <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2">
+                            @NoDataText
+                        </MudText>
+                    </div>
+                </NoRecordsContent>
+                
+                <LoadingContent>
+                    <div class="d-flex justify-center pa-4">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Medium" />
+                    </div>
+                </LoadingContent>
+                
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        </MudCardContent>
+    </MudCard>
+
+    @* 🔢 선택된 아이템 정보 *@
+    @if (MultiSelection && _selectedItems.Count > 0)
+    {
+        <MudCard Class="mt-2" Elevation="1">
+            <MudCardContent Class="py-2">
+                <div class="d-flex align-center justify-space-between">
+                    <MudText Typo="Typo.body2">
+                        @@_selectedItems.Count개 항목이 선택됨
+                    </MudText>
+                    
+                    @if (BulkActionContent != null)
+                    {
+                        <div class="d-flex gap-2">
+                            @BulkActionContent(_selectedItems.ToList())
+                        </div>
+                    }
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+</div>
+
+@code {
+    private string _searchTerm = string.Empty;
+    private HashSet<T> _selectedItems = new();
+    private bool? _selectAll;
+    private IEnumerable<T> _filteredItems = new List<T>();
+
+    /// <summary>
+    /// 데이터 소스
+    /// </summary>
+    [Parameter] public IEnumerable<T> Items { get; set; } = new List<T>();
+
+    /// <summary>
+    /// 로딩 상태
+    /// </summary>
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>
+    /// 조밀한 테이블 여부
+    /// </summary>
+    [Parameter] public bool Dense { get; set; } = true;
+
+    /// <summary>
+    /// 고정 헤더 여부
+    /// </summary>
+    [Parameter] public bool FixedHeader { get; set; } = false;
+
+    /// <summary>
+    /// 테이블 높이
+    /// </summary>
+    [Parameter] public string? Height { get; set; }
+
+    /// <summary>
+    /// 페이지당 행 수
+    /// </summary>
+    [Parameter] public int RowsPerPage { get; set; } = 20;
+
+    /// <summary>
+    /// 다중 선택 가능 여부
+    /// </summary>
+    [Parameter] public bool MultiSelection { get; set; } = false;
+
+    /// <summary>
+    /// 검색 기능 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowSearch { get; set; } = true;
+
+    /// <summary>
+    /// 필터 기능 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowFilters { get; set; } = false;
+
+    /// <summary>
+    /// 액션 버튼 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// 데이터 없을 때 표시할 텍스트
+    /// </summary>
+    [Parameter] public string NoDataText { get; set; } = "데이터가 없습니다.";
+
+    /// <summary>
+    /// 헤더 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+
+    /// <summary>
+    /// 행 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment<T>? RowTemplate { get; set; }
+
+    /// <summary>
+    /// 액션 버튼 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment<T>? ActionContent { get; set; }
+
+    /// <summary>
+    /// 필터 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? FilterContent { get; set; }
+
+    /// <summary>
+    /// 일괄 작업 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment<List<T>>? BulkActionContent { get; set; }
+
+    /// <summary>
+    /// 검색 함수
+    /// </summary>
+    [Parameter] public Func<T, string, bool>? SearchFunction { get; set; }
+
+    /// <summary>
+    /// 편집 버튼 클릭 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<T> OnEdit { get; set; }
+
+    /// <summary>
+    /// 삭제 버튼 클릭 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<T> OnDelete { get; set; }
+
+    /// <summary>
+    /// 선택 항목 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<HashSet<T>> OnSelectionChanged { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        FilterItems();
+    }
+
+    private async Task HandleItemSelectionChanged(T item, bool isSelected)
+    {
+        if (isSelected)
+        {
+            _selectedItems.Add(item);
+        }
+        else
+        {
+            _selectedItems.Remove(item);
+        }
+
+        // 전체 선택 상태 업데이트
+        UpdateSelectAllState();
+
+        await OnSelectionChanged.InvokeAsync(_selectedItems);
+    }
+
+    private void UpdateSelectAllState()
+    {
+        var totalItems = _filteredItems.Count();
+        var selectedCount = _selectedItems.Count;
+
+        if (selectedCount == 0)
+        {
+            _selectAll = false;
+        }
+        else if (selectedCount == totalItems)
+        {
+            _selectAll = true;
+        }
+        else
+        {
+            _selectAll = null; // TriState (부분 선택)
+        }
+    }
+
+    private async Task HandleSelectAllChanged(bool? value)
+    {
+        if (value == true)
+        {
+            // 전체 선택
+            _selectedItems = _filteredItems.ToHashSet();
+            _selectAll = true;
+        }
+        else
+        {
+            // 전체 해제
+            _selectedItems.Clear();
+            _selectAll = false;
+        }
+
+        await OnSelectionChanged.InvokeAsync(_selectedItems);
+        StateHasChanged();
+    }
+
+    private void FilterItems()
+    {
+        _filteredItems = Items;
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm) && SearchFunction != null)
+        {
+            _filteredItems = _filteredItems.Where(item => SearchFunction(item, _searchTerm));
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnSearchKeyPress(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            FilterItems();
+        }
+    }
+
+    private async Task HandleEdit(T item)
+    {
+        await OnEdit.InvokeAsync(item);
+    }
+
+    private async Task HandleDelete(T item)
+    {
+        await OnDelete.InvokeAsync(item);
+    }
+}

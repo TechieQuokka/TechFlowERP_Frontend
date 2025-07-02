@@ -1,0 +1,154 @@
+﻿@using MudBlazor
+
+<MudNavMenu>
+    @* 🏠 대시보드 *@
+    <MudNavLink Href="/"
+                Match="NavLinkMatch.All"
+                Icon="Icons.Material.Filled.Dashboard">
+        대시보드
+    </MudNavLink>
+
+    @* 👥 클라이언트 관리 *@
+    <MudNavGroup Text="클라이언트"
+                 Icon="Icons.Material.Filled.Business"
+                 Expanded="false">
+        <MudNavLink Href="/clients"
+                    Icon="Icons.Material.Filled.List">
+            클라이언트 목록
+        </MudNavLink>
+        <MudNavLink Href="/clients/create"
+                    Icon="Icons.Material.Filled.Add">
+            클라이언트 추가
+        </MudNavLink>
+    </MudNavGroup>
+
+    @* 👨‍💼 직원 관리 *@
+    <MudNavGroup Text="직원 관리"
+                 Icon="Icons.Material.Filled.People"
+                 Expanded="false">
+        <MudNavLink Href="/employees"
+                    Icon="Icons.Material.Filled.List">
+            직원 목록
+        </MudNavLink>
+        <MudNavLink Href="/employees/create"
+                    Icon="Icons.Material.Filled.PersonAdd">
+            직원 추가
+        </MudNavLink>
+        <MudNavLink Href="/employees/skills"
+                    Icon="Icons.Material.Filled.Psychology">
+            기술 관리
+        </MudNavLink>
+    </MudNavGroup>
+
+    @* 📊 프로젝트 관리 *@
+    <MudNavGroup Text="프로젝트"
+                 Icon="Icons.Material.Filled.Work"
+                 Expanded="true">
+        <MudNavLink Href="/projects"
+                    Icon="Icons.Material.Filled.List">
+            프로젝트 목록
+        </MudNavLink>
+        <MudNavLink Href="/projects/create"
+                    Icon="Icons.Material.Filled.Add">
+            프로젝트 생성
+        </MudNavLink>
+        <MudNavLink Href="/projects/assignments"
+                    Icon="Icons.Material.Filled.Assignment">
+            인력 배정
+        </MudNavLink>
+    </MudNavGroup>
+
+    @* ⏰ 시간 관리 *@
+    <MudNavGroup Text="시간 관리"
+                 Icon="Icons.Material.Filled.Schedule"
+                 Expanded="false">
+        <MudNavLink Href="/timeentries"
+                    Icon="Icons.Material.Filled.AccessTime">
+            시간 기록
+        </MudNavLink>
+        <MudNavLink Href="/timesheet"
+                    Icon="Icons.Material.Filled.TableChart">
+            타임시트
+        </MudNavLink>
+        <MudNavLink Href="/timeapproval"
+                    Icon="Icons.Material.Filled.Approval">
+            시간 승인
+        </MudNavLink>
+    </MudNavGroup>
+
+    @* 💰 인보이스 관리 *@
+    <MudNavGroup Text="인보이스"
+                 Icon="Icons.Material.Filled.Receipt"
+                 Expanded="false">
+        <MudNavLink Href="/invoices"
+                    Icon="Icons.Material.Filled.List">
+            인보이스 목록
+        </MudNavLink>
+        <MudNavLink Href="/invoices/create"
+                    Icon="Icons.Material.Filled.Add">
+            인보이스 생성
+        </MudNavLink>
+    </MudNavGroup>
+
+    @* 📈 리포트 *@
+    <MudNavGroup Text="리포트"
+                 Icon="Icons.Material.Filled.Analytics"
+                 Expanded="false">
+        <MudNavLink Href="/reports/projects"
+                    Icon="Icons.Material.Filled.BarChart">
+            프로젝트 리포트
+        </MudNavLink>
+        <MudNavLink Href="/reports/utilization"
+                    Icon="Icons.Material.Filled.PieChart">
+            활용도 리포트
+        </MudNavLink>
+        <MudNavLink Href="/reports/financial"
+                    Icon="Icons.Material.Filled.AttachMoney">
+            재무 리포트
+        </MudNavLink>
+    </MudNavGroup>
+
+    <MudDivider Class="my-3" />
+
+    @* 🧪 개발/테스트 도구 *@
+    <MudNavGroup Text="개발 도구"
+                 Icon="Icons.Material.Filled.DeveloperMode"
+                 Expanded="false">
+        <MudNavLink Href="/charts-demo"
+                    Icon="Icons.Material.Filled.ShowChart">
+            Charts Demo
+        </MudNavLink>
+    </MudNavGroup>
+
+    <MudDivider Class="my-3" />
+
+    @* 🆕 관리자 메뉴 (권한 기반) *@
+    <AuthorizeView Roles="Admin,Manager">
+        <Authorized>
+            <MudNavGroup Text="시스템 관리"
+                         Icon="Icons.Material.Filled.Settings"
+                         Expanded="false">
+                <MudNavLink Href="/administration/users"
+                            Icon="Icons.Material.Filled.SupervisorAccount">
+                    사용자 관리
+                </MudNavLink>
+                <MudNavLink Href="/administration/departments"
+                            Icon="Icons.Material.Filled.Business">
+                    부서 관리
+                </MudNavLink>
+                <MudNavLink Href="/administration/positions"
+                            Icon="Icons.Material.Filled.WorkHistory">
+                    직급 관리
+                </MudNavLink>
+                <MudNavLink Href="/administration/audit"
+                            Icon="Icons.Material.Filled.Audit">
+                    감사 로그
+                </MudNavLink>
+                <MudNavLink Href="/administration/settings"
+                            Icon="Icons.Material.Filled.Tune">
+                    시스템 설정
+                </MudNavLink>
+            </MudNavGroup>
+        </Authorized>
+    </AuthorizeView>
+</MudNavMenu>

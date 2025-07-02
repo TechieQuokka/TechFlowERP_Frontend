@@ -1,0 +1,118 @@
+@using TechFlowERP.Shared.Models.Charts
+
+<div class="chart-grid @GridClass">
+    @if (IsResponsive)
+    {
+        <div class="row">
+            @for (int i = 0; i < Charts.Count; i++)
+            {
+                var chart = Charts[i];
+                var colClass = GetColumnClass(i);
+
+                <div class="@colClass mb-4">
+                    @chart
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-3">
+            @foreach (var chart in Charts)
+            {
+                <div class="chart-item">
+                    @chart
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<RenderFragment> Charts { get; set; } = new();
+    [Parameter] public bool IsResponsive { get; set; } = true;
+    [Parameter] public string GridClass { get; set; } = "";
+    [Parameter] public int ChartsPerRow { get; set; } = 2;
+    [Parameter] public ChartLayout Layout { get; set; } = ChartLayout.Grid;
+
+    private string GetColumnClass(int index)
+    {
+        if (!IsResponsive) return "col-12";
+
+        return Layout switch
+        {
+            ChartLayout.SingleColumn => "col-12",
+            ChartLayout.TwoColumns => "col-12 col-md-6",
+            ChartLayout.ThreeColumns => "col-12 col-md-6 col-lg-4",
+            ChartLayout.FourColumns => "col-12 col-sm-6 col-md-4 col-lg-3",
+            ChartLayout.Grid => ChartsPerRow switch
+            {
+                1 => "col-12",
+                2 => "col-12 col-md-6",
+                3 => "col-12 col-md-6 col-lg-4",
+                4 => "col-12 col-sm-6 col-md-4 col-lg-3",
+                _ => "col-12 col-md-6"
+            },
+            ChartLayout.Dashboard => index switch
+            {
+                0 => "col-12 col-lg-8", // 첫 번째 차트는 크게
+                _ => "col-12 col-md-6 col-lg-4" // 나머지는 작게
+            },
+            _ => "col-12 col-md-6"
+        };
+    }
+}
+
+<style>
+    .chart-grid {
+        width: 100%;
+    }
+
+    .chart-item {
+        flex: 1;
+        min-width: 300px;
+    }
+
+    /* 반응형 간격 조정 */
+    @@media (max-width: 768px) {
+        .chart-grid .row
+
+    {
+        margin: 0 -8px;
+    }
+
+    .chart-grid .row > div {
+        padding: 0 8px;
+    }
+
+    }
+
+    /* 대시보드 레이아웃 특별 스타일 */
+    .chart-grid.dashboard-layout {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    /* 애니메이션 */
+    .chart-item {
+        transition: transform 0.2s ease;
+    }
+
+        .chart-item:hover {
+            transform: translateY(-2px);
+        }
+</style>
+
+@* Chart Layout 열거형 정의 (C# 파일에서 분리 가능) *@
+@code {
+    public enum ChartLayout
+    {
+        SingleColumn,
+        TwoColumns,
+        ThreeColumns,
+        FourColumns,
+        Grid,
+        Dashboard
+    }
+}

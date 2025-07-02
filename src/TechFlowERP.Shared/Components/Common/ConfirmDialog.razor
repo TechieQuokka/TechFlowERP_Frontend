@@ -1,0 +1,185 @@
+@using MudBlazor
+
+<MudDialog @bind-IsVisible="@_isVisible"
+           MaxWidth="@MaxWidth"
+           CloseButton="false"
+           DisableBackdropClick="@DisableBackdropClick">
+    <DialogContent>
+        <div class="d-flex align-center mb-4">
+            @if (ShowIcon)
+            {
+                <MudIcon Icon="@GetIcon()"
+                         Color="@GetIconColor()"
+                         Size="Size.Large"
+                         Class="mr-3" />
+            }
+            <div>
+                <MudText Typo="Typo.h6" Class="mb-2">@Title</MudText>
+                @if (!string.IsNullOrEmpty(Message))
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">
+                        @Message
+                    </MudText>
+                }
+            </div>
+        </div>
+
+        @if (ChildContent != null)
+        {
+            <div class="mt-4">
+                @ChildContent
+            </div>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="@HandleCancel"
+                   Variant="Variant.Text"
+                   Color="Color.Secondary">
+            @CancelText
+        </MudButton>
+
+        <MudButton OnClick="@HandleConfirm"
+                   Variant="Variant.Filled"
+                   Color="@GetConfirmColor()"
+                   StartIcon="@ConfirmIcon"
+                   Class="ml-2">
+            @ConfirmText
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _isVisible;
+
+    /// <summary>
+    /// 다이얼로그 표시 여부
+    /// </summary>
+    [Parameter]
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set
+        {
+            if (_isVisible != value)
+            {
+                _isVisible = value;
+                IsVisibleChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 표시 여부 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<bool> IsVisibleChanged { get; set; }
+
+    /// <summary>
+    /// 다이얼로그 제목
+    /// </summary>
+    [Parameter] public string Title { get; set; } = "확인";
+
+    /// <summary>
+    /// 다이얼로그 메시지
+    /// </summary>
+    [Parameter] public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 다이얼로그 타입
+    /// </summary>
+    [Parameter] public ConfirmDialogType Type { get; set; } = ConfirmDialogType.Confirm;
+
+    /// <summary>
+    /// 확인 버튼 텍스트
+    /// </summary>
+    [Parameter] public string ConfirmText { get; set; } = "확인";
+
+    /// <summary>
+    /// 취소 버튼 텍스트
+    /// </summary>
+    [Parameter] public string CancelText { get; set; } = "취소";
+
+    /// <summary>
+    /// 확인 버튼 아이콘
+    /// </summary>
+    [Parameter] public string ConfirmIcon { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 아이콘 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowIcon { get; set; } = true;
+
+    /// <summary>
+    /// 다이얼로그 최대 너비
+    /// </summary>
+    [Parameter] public MaxWidth MaxWidth { get; set; } = MaxWidth.Small;
+
+    /// <summary>
+    /// 배경 클릭으로 닫기 비활성화
+    /// </summary>
+    [Parameter] public bool DisableBackdropClick { get; set; } = true;
+
+    /// <summary>
+    /// 확인 버튼 클릭 이벤트
+    /// </summary>
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    /// <summary>
+    /// 취소 버튼 클릭 이벤트
+    /// </summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    /// <summary>
+    /// 추가 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task HandleConfirm()
+    {
+        IsVisible = false;
+        await OnConfirm.InvokeAsync();
+    }
+
+    private async Task HandleCancel()
+    {
+        IsVisible = false;
+        await OnCancel.InvokeAsync();
+    }
+
+    private string GetIcon()
+    {
+        return Type switch
+        {
+            ConfirmDialogType.Warning => Icons.Material.Filled.Warning,
+            ConfirmDialogType.Error => Icons.Material.Filled.Error,
+            ConfirmDialogType.Info => Icons.Material.Filled.Info,
+            ConfirmDialogType.Success => Icons.Material.Filled.CheckCircle,
+            ConfirmDialogType.Delete => Icons.Material.Filled.Delete,
+            _ => Icons.Material.Filled.Help
+        };
+    }
+
+    private Color GetIconColor()
+    {
+        return Type switch
+        {
+            ConfirmDialogType.Warning => Color.Warning,
+            ConfirmDialogType.Error => Color.Error,
+            ConfirmDialogType.Info => Color.Info,
+            ConfirmDialogType.Success => Color.Success,
+            ConfirmDialogType.Delete => Color.Error,
+            _ => Color.Primary
+        };
+    }
+
+    private Color GetConfirmColor()
+    {
+        return Type switch
+        {
+            ConfirmDialogType.Warning => Color.Warning,
+            ConfirmDialogType.Error => Color.Error,
+            ConfirmDialogType.Delete => Color.Error,
+            _ => Color.Primary
+        };
+    }
+}

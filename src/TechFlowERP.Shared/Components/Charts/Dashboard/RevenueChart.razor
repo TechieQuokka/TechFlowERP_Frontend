@@ -1,0 +1,182 @@
+﻿@using Radzen
+@using Radzen.Blazor
+@using TechFlowERP.Shared.Models.Charts
+@using TechFlowERP.Shared.Components.Charts.Base
+@inherits TechFlowERP.Shared.Components.BaseComponent
+
+<BaseChart Title="@Title" 
+           Height="@Height" 
+           Width="@Width"
+           IsLoading="@LoadingState.IsLoading"
+           HasError="@LoadingState.HasError"
+           HasNoData="@LoadingState.HasNoData"
+           ErrorMessage="@LoadingState.ErrorMessage"
+           OnRetry="@OnRetryAsync"
+           ShowFooter="true"
+           FooterText="@GetFooterText()">
+    
+    <RadzenChart style="@ChartStyle">
+        <RadzenLineSeries Data="@ChartData" 
+                          CategoryProperty="Period" 
+                          ValueProperty="Amount"
+                          Title="@SeriesTitle"
+                          Stroke="@LineColor"
+                          StrokeWidth="@StrokeWidth"
+                          Smooth="@IsSmooth" />
+        
+        <RadzenCategoryAxis Padding="20" />
+        <RadzenValueAxis Formatter="@FormatValue">
+            <RadzenGridLines Visible="true" />
+            <RadzenAxisTitle Text="@YAxisTitle" />
+        </RadzenValueAxis>
+        
+        <RadzenLegend Position="LegendPosition.Top" />
+    </RadzenChart>
+    
+</BaseChart>
+
+@code {
+    [Parameter] public string Title { get; set; } = "매출 추이";
+    [Parameter] public string SeriesTitle { get; set; } = "월별 매출";
+    [Parameter] public string YAxisTitle { get; set; } = "매출 (USD)";
+    [Parameter] public int Height { get; set; } = ChartOptions.RevenueLine.Height;
+    [Parameter] public int Width { get; set; } = ChartOptions.RevenueLine.Width;
+    [Parameter] public int StrokeWidth { get; set; } = ChartOptions.RevenueLine.StrokeWidth;
+    [Parameter] public bool IsSmooth { get; set; } = ChartOptions.RevenueLine.Smooth;
+    [Parameter] public string LineColor { get; set; } = ChartOptions.RevenueLine.Colors[0];
+    [Parameter] public List<RevenueChartData> Data { get; set; } = new();
+    [Parameter] public EventCallback OnDataRequested { get; set; }
+    [Parameter] public string DateFormat { get; set; } = "MMM yyyy";
+
+    private ChartLoadingState LoadingState { get; set; } = new();
+    private List<RevenueChartData> ChartData { get; set; } = new();
+    private string ChartStyle => $"width: 100%; height: {Height - 50}px;";
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Data.Any())
+        {
+            ChartData = PrepareChartData(Data);
+            LoadingState.HasNoData = false;
+        }
+        else
+        {
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            LoadingState.IsLoading = true;
+            LoadingState.HasError = false;
+            LoadingState.HasNoData = false;
+
+            if (OnDataRequested.HasDelegate)
+            {
+                await OnDataRequested.InvokeAsync();
+            }
+            else if (!Data.Any())
+            {
+                // 샘플 데이터 (실제로는 API에서 가져옴)
+                var sampleData = GetSampleData();
+                ChartData = PrepareChartData(sampleData);
+            }
+            else
+            {
+                ChartData = PrepareChartData(Data);
+            }
+
+            LoadingState.HasNoData = !ChartData.Any();
+            LoadingState.LastLoadTime = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            LoadingState.HasError = true;
+            LoadingState.ErrorMessage = $"데이터 로딩 실패: {ex.Message}";
+        }
+        finally
+        {
+            LoadingState.IsLoading = false;
+        }
+    }
+
+    private List<RevenueChartData> PrepareChartData(List<RevenueChartData> rawData)
+    {
+        // 날짜순 정렬 및 Period 포맷팅
+        return rawData
+            .OrderBy(d => d.Date)
+            .Select(d => new RevenueChartData
+            {
+                Date = d.Date,
+                Amount = d.Amount,
+                Period = d.Date.ToString(DateFormat),
+                Category = d.Category
+            })
+            .ToList();
+    }
+
+    private async Task OnRetryAsync()
+    {
+        LoadingState.RetryCount++;
+        await LoadDataAsync();
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value is decimal decimalValue)
+        {
+            return $"${decimalValue:N0}";
+        }
+        return value?.ToString() ?? "";
+    }
+
+    private string GetFooterText()
+    {
+        if (!ChartData.Any()) return "";
+        
+        var totalRevenue = ChartData.Sum(d => d.Amount);
+        var avgRevenue = ChartData.Average(d => d.Amount);
+        
+        return $"총 매출: ${totalRevenue:N0} | 평균: ${avgRevenue:N0} | 업데이트: {LoadingState.LastLoadTime:HH:mm}";
+    }
+
+    private List<RevenueChartData> GetSampleData()
+    {
+        var baseDate = DateTime.Now.AddMonths(-11);
+        var random = new Random();
+        var data = new List<RevenueChartData>();
+
+        for (int i = 0; i < 12; i++)
+        {
+            var date = baseDate.AddMonths(i);
+            var amount = 50000 + (decimal)(random.NextDouble() * 100000); // 50K-150K 범위
+            
+            data.Add(new RevenueChartData
+            {
+                Date = date,
+                Amount = Math.Round(amount, 0),
+                Category = "Revenue"
+            });
+        }
+
+        return data;
+    }
+
+    // 외부에서 데이터 갱신할 때 사용
+    public async Task RefreshAsync()
+    {
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    // 차트 포인트 클릭 이벤트 (나중에 추가 가능)
+    [Parameter] public EventCallback<RevenueChartData> OnPointClicked { get; set; }
+}

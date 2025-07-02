@@ -1,0 +1,503 @@
+﻿@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.Employee
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@inject IEmployeeService EmployeeService
+@inject IJSRuntime JSRuntime
+@inject ILogger<EmployeeSkillsModal> Logger
+
+<div class="modal fade" id="skillsModal" tabindex="-1" aria-labelledby="skillsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="skillsModalLabel">
+                    <i class="fas fa-code me-2"></i>
+                    @currentEmployee?.Name 기술 스택 관리
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                @if (isLoading)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">로딩 중...</span>
+                        </div>
+                        <p class="mt-2 text-muted">기술 정보를 불러오는 중...</p>
+                    </div>
+                }
+                else
+                {
+                    <!-- 새 기술 추가 폼 -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-plus me-2"></i>새 기술 추가
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <EditForm Model="newSkillModel" OnValidSubmit="AddNewSkill">
+                                <DataAnnotationsValidator />
+
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">기술명 <span class="text-danger">*</span></label>
+                                            <InputText class="form-control" @bind-Value="newSkillModel.Technology"
+                                                       placeholder="예: C#, React, Python" />
+                                            <ValidationMessage For="() => newSkillModel.Technology" class="text-danger" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="mb-3">
+                                            <label class="form-label">숙련도</label>
+                                            <InputSelect class="form-select" @bind-Value="newSkillModel.SkillLevel">
+                                                <option value="@SkillLevel.Beginner">초급</option>
+                                                <option value="@SkillLevel.Intermediate">중급</option>
+                                                <option value="@SkillLevel.Expert">고급</option>
+                                            </InputSelect>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="mb-3">
+                                            <label class="form-label">경력(년)</label>
+                                            <InputNumber class="form-control" @bind-Value="newSkillModel.YearsExperience"
+                                                         min="0" max="50" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="mb-3">
+                                            <label class="form-label">마지막 사용</label>
+                                            <InputDate class="form-control" @bind-Value="newSkillModel.LastUsedDate" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="mb-3">
+                                            <label class="form-label">&nbsp;</label>
+                                            <div>
+                                                <button type="submit" class="btn btn-primary" disabled="@isAddingSkill">
+                                                    @if (isAddingSkill)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm me-1"></span>
+                                                    }
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12">
+                                        <label class="form-label">자격증 (선택사항)</label>
+                                        <InputText class="form-control" @bind-Value="newSkillModel.Certification"
+                                                   placeholder="예: AWS Certified Developer, Oracle Certified Professional" />
+                                    </div>
+                                </div>
+                            </EditForm>
+                        </div>
+                    </div>
+
+                    <!-- 기존 기술 목록 -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-list me-2"></i>보유 기술 목록
+                                <span class="badge bg-secondary ms-2">@@skills.Count개</span>
+                            </h6>
+                            @if (skills.Any())
+                            {
+                                <button type="button" class="btn btn-outline-info btn-sm" @onclick="ExportSkills">
+                                    <i class="fas fa-download me-1"></i>내보내기
+                                </button>
+                            }
+                        </div>
+                        <div class="card-body p-0">
+                            @if (skills.Any())
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>기술명</th>
+                                                <th>숙련도</th>
+                                                <th>경력</th>
+                                                <th>마지막 사용</th>
+                                                <th>자격증</th>
+                                                <th>작업</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var skill in skills.OrderByDescending(s => s.SkillLevel).ThenBy(s => s.Technology))
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex align-items-center">
+                                                            <i class="fab fa-@GetTechnologyIcon(skill.Technology) me-2 text-primary"></i>
+                                                            <strong>@skill.Technology</strong>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge badge-skill-@skill.SkillLevel.ToString().ToLower()">
+                                                            @GetSkillLevelText(skill.SkillLevel)
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="fw-bold">@@skill.YearsExperience년</span>
+                                                    </td>
+                                                    <td>
+                                                        @if (skill.LastUsedDate.HasValue)
+                                                        {
+                                                            <span class="@GetLastUsedClass(skill.LastUsedDate.Value)">
+                                                                @skill.LastUsedDate.Value.ToString("yyyy-MM-dd")
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">미기록</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrEmpty(skill.Certification))
+                                                        {
+                                                            <span class="badge bg-success" title="@skill.Certification">
+                                                                <i class="fas fa-certificate me-1"></i>있음
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">없음</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                                                @onclick="() => RemoveSkill(skill)"
+                                                                disabled="@isRemovingSkill"
+                                                                title="기술 삭제">
+                                                            @if (isRemovingSkill && skillToRemove?.Id == skill.Id)
+                                                            {
+                                                                <span class="spinner-border spinner-border-sm"></span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="fas fa-trash"></i>
+                                                            }
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- 기술 통계 -->
+                                <div class="card-footer bg-light">
+                                    <div class="row text-center">
+                                        <div class="col-md-3">
+                                            <div class="text-primary">
+                                                <i class="fas fa-star"></i>
+                                                <strong>@skills.Count(s => s.SkillLevel == SkillLevel.Expert)</strong>
+                                            </div>
+                                            <small class="text-muted">고급</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="text-success">
+                                                <i class="fas fa-star-half-alt"></i>
+                                                <strong>@skills.Count(s => s.SkillLevel == SkillLevel.Intermediate)</strong>
+                                            </div>
+                                            <small class="text-muted">중급</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="text-info">
+                                                <i class="fas fa-seedling"></i>
+                                                <strong>@skills.Count(s => s.SkillLevel == SkillLevel.Beginner)</strong>
+                                            </div>
+                                            <small class="text-muted">초급</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="text-warning">
+                                                <i class="fas fa-certificate"></i>
+                                                <strong>@skills.Count(s => !string.IsNullOrEmpty(s.Certification))</strong>
+                                            </div>
+                                            <small class="text-muted">자격증</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4">
+                                    <i class="fas fa-code fa-3x text-muted mb-3"></i>
+                                    <h6 class="text-muted">등록된 기술이 없습니다</h6>
+                                    <p class="text-muted">위의 폼을 사용해 새 기술을 추가해보세요.</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnSkillsUpdated { get; set; }
+
+    private EmployeeDto? currentEmployee = null;
+    private List<EmployeeSkillDto> skills = new();
+    private AddEmployeeSkillRequest newSkillModel = new();
+
+    private bool isLoading = false;
+    private bool isAddingSkill = false;
+    private bool isRemovingSkill = false;
+    private EmployeeSkillDto? skillToRemove = null;
+
+    public async Task OpenAsync(EmployeeDto employee)
+    {
+        currentEmployee = employee;
+        newSkillModel = new AddEmployeeSkillRequest
+        {
+            EmployeeId = employee.Id,
+            LastUsedDate = DateTime.Today
+        };
+
+        await LoadSkills();
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('skillsModal')).show()");
+        StateHasChanged();
+    }
+
+    private async Task LoadSkills()
+    {
+        if (currentEmployee == null) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            skills = await EmployeeService.GetEmployeeSkillsAsync(currentEmployee.Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 목록 로드 중 오류 발생: {EmployeeId}", currentEmployee.Id);
+            skills = new List<EmployeeSkillDto>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddNewSkill()
+    {
+        if (string.IsNullOrWhiteSpace(newSkillModel.Technology)) return;
+
+        // 중복 체크
+        if (skills.Any(s => s.Technology.Equals(newSkillModel.Technology, StringComparison.OrdinalIgnoreCase)))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "이미 등록된 기술입니다.");
+            return;
+        }
+
+        isAddingSkill = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await EmployeeService.AddEmployeeSkillAsync(newSkillModel);
+
+            if (result != null)
+            {
+                skills.Add(result);
+
+                // 폼 리셋
+                newSkillModel = new AddEmployeeSkillRequest
+                {
+                    EmployeeId = currentEmployee!.Id,
+                    LastUsedDate = DateTime.Today
+                };
+
+                await OnSkillsUpdated.InvokeAsync();
+                StateHasChanged();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "기술 추가에 실패했습니다.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 추가 중 오류 발생: {Technology}", newSkillModel.Technology);
+            await JSRuntime.InvokeVoidAsync("alert", "기술 추가 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isAddingSkill = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveSkill(EmployeeSkillDto skill)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", $"'{skill.Technology}' 기술을 삭제하시겠습니까?"))
+            return;
+
+        skillToRemove = skill;
+        isRemovingSkill = true;
+        StateHasChanged();
+
+        try
+        {
+            bool success = await EmployeeService.RemoveEmployeeSkillAsync(skill.Id);
+
+            if (success)
+            {
+                skills.Remove(skill);
+                await OnSkillsUpdated.InvokeAsync();
+                StateHasChanged();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "기술 삭제에 실패했습니다.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 삭제 중 오류 발생: {SkillId}", skill.Id);
+            await JSRuntime.InvokeVoidAsync("alert", "기술 삭제 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            skillToRemove = null;
+            isRemovingSkill = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportSkills()
+    {
+        if (!skills.Any()) return;
+
+        try
+        {
+            var csvContent = "기술명,숙련도,경력(년),마지막사용일,자격증\n";
+
+            foreach (var skill in skills)
+            {
+                csvContent += $"\"{skill.Technology}\",\"{GetSkillLevelText(skill.SkillLevel)}\",{skill.YearsExperience},";
+                csvContent += $"\"{skill.LastUsedDate?.ToString("yyyy-MM-dd") ?? ""}\",\"{skill.Certification}\"\n";
+            }
+
+            var fileName = $"{currentEmployee?.Name}_기술스택_{DateTime.Now:yyyyMMdd}.csv";
+
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "text/csv", csvContent);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 스택 내보내기 중 오류 발생");
+            await JSRuntime.InvokeVoidAsync("alert", "내보내기 중 오류가 발생했습니다.");
+        }
+    }
+
+    private string GetSkillLevelText(SkillLevel level)
+    {
+        return level switch
+        {
+            SkillLevel.Beginner => "초급",
+            SkillLevel.Intermediate => "중급",
+            SkillLevel.Expert => "고급",
+            _ => "미정"
+        };
+    }
+
+    private string GetTechnologyIcon(string technology)
+    {
+        return technology.ToLower() switch
+        {
+            "c#" or "csharp" => "microsoft",
+            "javascript" or "js" => "js-square",
+            "typescript" or "ts" => "js-square",
+            "react" => "react",
+            "angular" => "angular",
+            "vue" or "vue.js" => "vuejs",
+            "python" => "python",
+            "java" => "java",
+            "php" => "php",
+            "html" => "html5",
+            "css" => "css3-alt",
+            "node" or "nodejs" => "node-js",
+            "docker" => "docker",
+            "aws" => "aws",
+            "git" => "git-alt",
+            _ => "code"
+        };
+    }
+
+    private string GetLastUsedClass(DateTime lastUsed)
+    {
+        var daysSinceUsed = (DateTime.Now - lastUsed).Days;
+
+        return daysSinceUsed switch
+        {
+            <= 30 => "text-success",      // 1개월 이내
+            <= 90 => "text-warning",      // 3개월 이내
+            <= 365 => "text-muted",       // 1년 이내
+            _ => "text-danger"            // 1년 초과
+        };
+    }
+}
+
+<style>
+    .badge-skill-beginner {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+
+    .badge-skill-intermediate {
+        background-color: #e8f5e8;
+        color: #2e7d32;
+    }
+
+    .badge-skill-expert {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+
+    .table th {
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 0.875rem;
+    }
+
+    .table td {
+        vertical-align: middle;
+        font-size: 0.875rem;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+</style>
+
+<script>
+    window.downloadFile = (filename, contentType, content) => {
+        const blob = new Blob([content], { type: contentType });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+</script>

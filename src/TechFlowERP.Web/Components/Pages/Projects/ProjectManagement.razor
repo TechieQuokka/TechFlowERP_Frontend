@@ -1,0 +1,620 @@
+﻿@page "/projects/management"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.Project
+@using TechFlowERP.Models.Responses.Project
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@inject IProjectService ProjectService
+@inject IClientService ClientService
+@inject IEmployeeService EmployeeService
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProjectManagement> Logger
+
+<PageTitle>프로젝트 관리</PageTitle>
+
+<div class="container-fluid">
+    <!-- 헤더 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="text-primary mb-1">
+                        <i class="fas fa-project-diagram me-2"></i>프로젝트 관리
+                    </h2>
+                    <p class="text-muted mb-0">고객사 프로젝트와 팀 배정을 관리할 수 있습니다.</p>
+                </div>
+                <button type="button" class="btn btn-primary" @onclick="OpenProjectModal">
+                    <i class="fas fa-plus me-2"></i>프로젝트 추가
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 대시보드 통계 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">전체 프로젝트</h6>
+                            <h2 class="mb-0">@dashboardData.TotalProjects</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-project-diagram fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">진행 중</h6>
+                            <h2 class="mb-0">@dashboardData.ActiveProjects</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-play-circle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">이달 완료</h6>
+                            <h2 class="mb-0">@dashboardData.CompletedThisMonth</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">지연 프로젝트</h6>
+                            <h2 class="mb-0">@dashboardData.DelayedProjects</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 검색 및 필터 -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" class="form-control" placeholder="프로젝트명, 코드로 검색..."
+                       @bind="searchTerm" @oninput="OnSearchChanged" />
+            </div>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedStatus" @onchange="OnStatusFilterChanged">
+                <option value="">전체 상태</option>
+                <option value="0">기획</option>
+                <option value="1">진행중</option>
+                <option value="2">보류</option>
+                <option value="3">완료</option>
+                <option value="4">취소</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedClientId" @onchange="OnClientFilterChanged">
+                <option value="">전체 고객</option>
+                @foreach (var client in clients)
+                {
+                    <option value="@client.Id">@client.CompanyName</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedManagerId" @onchange="OnManagerFilterChanged">
+                <option value="">전체 매니저</option>
+                @foreach (var manager in managers)
+                {
+                    <option value="@manager.Id">@manager.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedRiskLevel" @onchange="OnRiskLevelFilterChanged">
+                <option value="">전체 위험도</option>
+                <option value="0">낮음</option>
+                <option value="1">보통</option>
+                <option value="2">높음</option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <button class="btn btn-outline-secondary" @onclick="RefreshData" title="새로고침">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 로딩 상태 -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">로딩 중...</span>
+            </div>
+            <p class="mt-2 text-muted">프로젝트 정보를 불러오는 중...</p>
+        </div>
+    }
+    else
+    {
+        <!-- 프로젝트 목록 -->
+        <div class="row">
+            @if (projects.Any())
+            {
+                @foreach (var project in currentPageProjects)
+                {
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card project-card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0 text-truncate" title="@project.Name">@project.Name</h6>
+                                    <small class="text-muted">@project.ProjectCode</small>
+                                </div>
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                                            data-bs-toggle="dropdown">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <button class="dropdown-item" @onclick="() => ViewProjectDetail(project)">
+                                                <i class="fas fa-eye me-2"></i>상세보기
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item" @onclick="() => EditProject(project)">
+                                                <i class="fas fa-edit me-2"></i>수정
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item" @onclick="() => ManageProjectTeam(project)">
+                                                <i class="fas fa-users me-2"></i>팀 관리
+                                            </button>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <button class="dropdown-item text-danger" @onclick="() => DeleteProject(project)">
+                                                <i class="fas fa-trash me-2"></i>삭제
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 프로젝트 상태 및 정보 -->
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <span class="badge bg-primary">
+                                            @GetStatusText(project.Status)
+                                        </span>
+                                    </div>
+                                    <div class="col-6 text-end">
+                                        <span class="badge bg-warning">
+                                            @GetRiskLevelText(project.RiskLevel)
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- 고객 및 매니저 정보 -->
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-center mb-1">
+                                        <i class="fas fa-building text-primary me-2"></i>
+                                        <small class="text-muted">@project.ClientName</small>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-user-tie text-success me-2"></i>
+                                        <small class="text-muted">@project.ManagerName</small>
+                                    </div>
+                                </div>
+
+                                <!-- 프로젝트 진행률 -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-muted">진행률</small>
+                                        <small class="text-muted">@project.CompletionPercentage.ToString("F1")%</small>
+                                    </div>
+                                    <div class="progress" style="height: 6px;">
+                                        <div class="progress-bar bg-success"
+                                             role="progressbar"
+                                             style="width: @project.CompletionPercentage%">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 기간 및 예산 정보 -->
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted d-block">시작일</small>
+                                        <small class="fw-bold">@project.StartDate.ToString("MM/dd")</small>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted d-block">예산</small>
+                                        <small class="fw-bold">@project.Budget.ToString("N0")만원</small>
+                                    </div>
+                                </div>
+
+                                @if (project.EndDate.HasValue)
+                                {
+                                    <div class="row mt-2">
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">종료일</small>
+                                            <small class="fw-bold">@project.EndDate.Value.ToString("MM/dd")</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">잔여일</small>
+                                            <small class="fw-bold">@@project.RemainingDays일</small>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- 기술 스택 -->
+                                @if (project.Technologies.Any())
+                                {
+                                    <div class="mt-3">
+                                        <small class="text-muted d-block mb-1">기술 스택</small>
+                                        <div class="tech-stack">
+                                            @foreach (var tech in project.Technologies.Take(3))
+                                            {
+                                                <span class="badge bg-secondary me-1 mb-1">@tech</span>
+                                            }
+                                            @if (project.Technologies.Count > 3)
+                                            {
+                                                <span class="badge bg-light text-dark">+@(project.Technologies.Count - 3)</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">팀원 @@project.Assignments.Count명</small>
+                                    </div>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-primary"
+                                                @onclick="() => ViewProjectDetail(project)">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success"
+                                                @onclick="() => ManageProjectTeam(project)">
+                                            <i class="fas fa-users"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="col-12">
+                    <div class="text-center py-5">
+                        <i class="fas fa-project-diagram fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">프로젝트가 없습니다</h5>
+                        <p class="text-muted">새 프로젝트를 추가해보세요.</p>
+                        <button type="button" class="btn btn-primary" @onclick="OpenProjectModal">
+                            <i class="fas fa-plus me-2"></i>프로젝트 추가
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- 페이징 -->
+        @if (totalPages > 1)
+        {
+            <div class="row">
+                <div class="col-12">
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">이전</button>
+                            </li>
+
+                            @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                            {
+                                <li class="page-item @(currentPage == i ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                </li>
+                            }
+
+                            <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">다음</button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    // 데이터
+    private List<ProjectDto> projects = new();
+    private List<ClientDto> clients = new();
+    private List<EmployeeDto> managers = new();
+    private List<EmployeeDto> employees = new();
+    private ProjectDashboardData dashboardData = new();
+
+    // UI 상태
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private string selectedStatus = string.Empty;
+    private string selectedClientId = string.Empty;
+    private string selectedManagerId = string.Empty;
+    private string selectedRiskLevel = string.Empty;
+
+    // 페이징
+    private int currentPage = 1;
+    private int pageSize = 12;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+    private List<ProjectDto> currentPageProjects => projects
+        .Skip((currentPage - 1) * pageSize)
+        .Take(pageSize)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 기본 데이터 로드
+            var clientsTask = ClientService.GetClientsAsync(1, 1000); // 모든 클라이언트 가져오기
+            var employeesTask = EmployeeService.GetActiveEmployeesAsync();
+            var dashboardTask = ProjectService.GetProjectDashboardDataAsync();
+
+            await Task.WhenAll(clientsTask, employeesTask, dashboardTask);
+
+            var clientResponse = await clientsTask;
+            clients = clientResponse?.Items ?? new List<ClientDto>();
+
+            employees = await employeesTask;
+            dashboardData = await dashboardTask;
+
+            // 매니저 필터링
+            managers = employees.Where(e =>
+                !string.IsNullOrEmpty(e.PositionTitle) && (
+                e.PositionTitle.Contains("매니저") ||
+                e.PositionTitle.Contains("팀장") ||
+                e.PositionTitle.Contains("부장") ||
+                e.PositionTitle.Contains("이사")
+                )).ToList();
+
+            await LoadProjects();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        try
+        {
+            ProjectStatus? status = null;
+            if (!string.IsNullOrEmpty(selectedStatus) && Enum.TryParse<ProjectStatus>(selectedStatus, out var parsedStatus))
+                status = parsedStatus;
+
+            Guid? clientId = null;
+            if (!string.IsNullOrEmpty(selectedClientId) && Guid.TryParse(selectedClientId, out var parsedClientId))
+                clientId = parsedClientId;
+
+            Guid? managerId = null;
+            if (!string.IsNullOrEmpty(selectedManagerId) && Guid.TryParse(selectedManagerId, out var parsedManagerId))
+                managerId = parsedManagerId;
+
+            var response = await ProjectService.GetProjectsAsync(1, 1000, searchTerm, status, clientId, managerId);
+
+            if (response.Success && response.Data != null)
+            {
+                projects = response.Data.Items;
+                totalCount = response.Data.TotalCount;
+
+                // 위험도 필터 적용
+                if (!string.IsNullOrEmpty(selectedRiskLevel) && Enum.TryParse<RiskLevel>(selectedRiskLevel, out var riskLevel))
+                {
+                    projects = projects.Where(p => p.RiskLevel == riskLevel).ToList();
+                    totalCount = projects.Count;
+                }
+
+                currentPage = 1;
+            }
+            else
+            {
+                projects = new List<ProjectDto>();
+                totalCount = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 목록 로드 중 오류 발생");
+            projects = new List<ProjectDto>();
+            totalCount = 0;
+        }
+    }
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        await Task.Delay(300);
+        await LoadProjects();
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        selectedStatus = e.Value?.ToString() ?? string.Empty;
+        await LoadProjects();
+    }
+
+    private async Task OnClientFilterChanged(ChangeEventArgs e)
+    {
+        selectedClientId = e.Value?.ToString() ?? string.Empty;
+        await LoadProjects();
+    }
+
+    private async Task OnManagerFilterChanged(ChangeEventArgs e)
+    {
+        selectedManagerId = e.Value?.ToString() ?? string.Empty;
+        await LoadProjects();
+    }
+
+    private async Task OnRiskLevelFilterChanged(ChangeEventArgs e)
+    {
+        selectedRiskLevel = e.Value?.ToString() ?? string.Empty;
+        await LoadProjects();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private async Task OpenProjectModal()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "프로젝트 추가 모달 (구현 예정)");
+    }
+
+    private async Task EditProject(ProjectDto project)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"{project.Name} 수정 (구현 예정)");
+    }
+
+    private async Task ViewProjectDetail(ProjectDto project)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"{project.Name} 상세보기 (구현 예정)");
+    }
+
+    private async Task ManageProjectTeam(ProjectDto project)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"{project.Name} 팀 관리 (구현 예정)");
+    }
+
+    private async Task DeleteProject(ProjectDto project)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", $"'{project.Name}' 프로젝트를 삭제하시겠습니까?"))
+        {
+            try
+            {
+                bool success = await ProjectService.DeleteProjectAsync(project.Id);
+                if (success)
+                {
+                    await LoadData();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "프로젝트 삭제에 실패했습니다.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "프로젝트 삭제 중 오류 발생: {ProjectId}", project.Id);
+                await JSRuntime.InvokeVoidAsync("alert", "프로젝트 삭제 중 오류가 발생했습니다.");
+            }
+        }
+    }
+
+    // UI 헬퍼 메서드들
+    private string GetStatusText(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "기획",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetRiskLevelText(RiskLevel risk)
+    {
+        return risk switch
+        {
+            RiskLevel.Low => "낮음",
+            RiskLevel.Medium => "보통",
+            RiskLevel.High => "높음",
+            _ => "알 수 없음"
+        };
+    }
+}
+
+<style>
+    .project-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+
+    .tech-stack {
+        max-height: 60px;
+        overflow: hidden;
+    }
+
+    .opacity-75 {
+        opacity: 0.75;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .dropdown-menu {
+        border: 1px solid #dee2e6;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+</style>

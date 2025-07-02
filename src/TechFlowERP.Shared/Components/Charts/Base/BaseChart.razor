@@ -1,0 +1,143 @@
+@using Radzen
+@using Radzen.Blazor
+@using TechFlowERP.Shared.Models.Charts
+
+<div class="chart-container @CssClass" style="@ContainerStyle">
+    @if (ShowTitle && !string.IsNullOrEmpty(Title))
+    {
+        <div class="chart-title">
+            <h5 class="mb-3">@Title</h5>
+        </div>
+    }
+
+    @if (IsLoading)
+    {
+        <div class="chart-loading d-flex justify-content-center align-items-center" style="height: @(Height)px;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">차트 로딩 중...</span>
+            </div>
+        </div>
+    }
+    else if (HasError)
+    {
+        <div class="chart-error d-flex justify-content-center align-items-center" style="height: @(Height)px;">
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle text-warning mb-2" style="font-size: 2rem;"></i>
+                <p class="text-muted">@ErrorMessage</p>
+                @if (ShowRetryButton)
+                {
+                    <button class="btn btn-outline-primary btn-sm" @onclick="OnRetryClicked">
+                        다시 시도
+                    </button>
+                }
+            </div>
+        </div>
+    }
+    else if (HasNoData)
+    {
+        <div class="chart-no-data d-flex justify-content-center align-items-center" style="height: @(Height)px;">
+            <div class="text-center">
+                <i class="fas fa-chart-bar text-muted mb-2" style="font-size: 2rem;"></i>
+                <p class="text-muted">표시할 데이터가 없습니다</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="chart-content">
+            @ChildContent
+        </div>
+    }
+
+    @if (ShowFooter && !string.IsNullOrEmpty(FooterText))
+    {
+        <div class="chart-footer mt-2">
+            <small class="text-muted">@FooterText</small>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public int Height { get; set; } = 300;
+    [Parameter] public int Width { get; set; } = 400;
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public bool HasError { get; set; } = false;
+    [Parameter] public bool HasNoData { get; set; } = false;
+    [Parameter] public string ErrorMessage { get; set; } = "차트를 불러오는 중 오류가 발생했습니다.";
+    [Parameter] public bool ShowTitle { get; set; } = true;
+    [Parameter] public bool ShowFooter { get; set; } = false;
+    [Parameter] public string? FooterText { get; set; }
+    [Parameter] public bool ShowRetryButton { get; set; } = true;
+    [Parameter] public string CssClass { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private string ContainerStyle => $"width: {Width}px; min-height: {Height}px;";
+
+    private async Task OnRetryClicked()
+    {
+        if (OnRetry.HasDelegate)
+        {
+            await OnRetry.InvokeAsync();
+        }
+    }
+}
+
+<style>
+    .chart-container {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 16px;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: box-shadow 0.3s ease;
+    }
+
+        .chart-container:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+    .chart-title h5 {
+        color: #333;
+        font-weight: 600;
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .chart-loading,
+    .chart-error,
+    .chart-no-data {
+        border: 2px dashed #e0e0e0;
+        border-radius: 6px;
+        background: #f8f9fa;
+    }
+
+    .chart-footer {
+        border-top: 1px solid #f0f0f0;
+        padding-top: 8px;
+        text-align: center;
+    }
+
+    /* 다크 테마 지원 */
+    [data-theme="dark"] .chart-container {
+        background: #2d3748;
+        border-color: #4a5568;
+        color: white;
+    }
+
+    [data-theme="dark"] .chart-title h5 {
+        color: #e2e8f0;
+    }
+
+    [data-theme="dark"] .chart-loading,
+    [data-theme="dark"] .chart-error,
+    [data-theme="dark"] .chart-no-data {
+        background: #1a202c;
+        border-color: #4a5568;
+    }
+
+    [data-theme="dark"] .chart-footer {
+        border-color: #4a5568;
+    }
+</style>

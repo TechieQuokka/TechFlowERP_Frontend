@@ -1,0 +1,690 @@
+﻿@page "/employees"
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Department
+@using TechFlowERP.Models.DTOs.Position
+@using TechFlowERP.Models.Requests.Employee
+@using TechFlowERP.Models.Responses.Employee
+@using TechFlowERP.Models.Common
+@using TechFlowERP.Web.Services.Interfaces
+@inject IEmployeeService EmployeeService
+@inject IDepartmentService DepartmentService
+@inject IPositionService PositionService
+@inject IJSRuntime JSRuntime
+@inject ILogger<EmployeeManagement> Logger
+
+<PageTitle>직원 관리</PageTitle>
+
+<div class="container-fluid">
+    <!-- 헤더 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="text-primary mb-1">
+                        <i class="fas fa-users me-2"></i>직원 관리
+                    </h2>
+                    <p class="text-muted mb-0">조직의 직원 정보와 기술 스택을 관리할 수 있습니다.</p>
+                </div>
+                <button type="button" class="btn btn-primary" @onclick="() => OpenEmployeeModal()">
+                    <i class="fas fa-user-plus me-2"></i>직원 추가
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 통계 카드 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">전체 직원</h6>
+                            <h2 class="mb-0">@(_statistics?.TotalEmployees ?? 0)</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">활성 직원</h6>
+                            <h2 class="mb-0">@(_statistics?.ActiveEmployees ?? 0)</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-user-check fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">평균 급여</h6>
+                            <h2 class="mb-0">@((_statistics?.AverageSalary ?? 0).ToString("N0"))만원</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-money-bill-wave fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">평균 활용도</h6>
+                            <h2 class="mb-0">@((_statistics?.AverageUtilization ?? 0).ToString("F1"))%</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 검색 및 필터 -->
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" class="form-control" placeholder="이름 또는 이메일로 검색..."
+                       @bind="searchTerm" @oninput="OnSearchChanged" />
+            </div>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedDepartmentId" @onchange="OnDepartmentFilterChanged">
+                <option value="">전체 부서</option>
+                @foreach (var dept in departments)
+                {
+                    <option value="@dept.Id">@dept.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@selectedPositionId" @onchange="OnPositionFilterChanged">
+                <option value="">전체 직급</option>
+                @foreach (var pos in positions)
+                {
+                    <option value="@pos.Id">@pos.Title</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" value="@statusFilter" @onchange="OnStatusFilterChanged">
+                <option value="">전체 상태</option>
+                <option value="active">활성</option>
+                <option value="inactive">비활성</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <div class="d-flex gap-1">
+                <button class="btn btn-outline-secondary" @onclick="RefreshData" title="새로고침">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn btn-outline-info" @onclick="ExportEmployees" title="내보내기">
+                    <i class="fas fa-download"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩 상태 -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">로딩 중...</span>
+            </div>
+            <p class="mt-2 text-muted">직원 정보를 불러오는 중...</p>
+        </div>
+    }
+    else
+    {
+        <!-- 직원 목록 테이블 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>직원 목록
+                    <span class="badge bg-secondary ms-2">@@totalCount개</span>
+                </h5>
+                <div class="d-flex gap-2 align-items-center">
+                    <small class="text-muted">페이지당 표시:</small>
+                    <select class="form-select form-select-sm" style="width: auto;" value="@pageSize" @onchange="OnPageSizeChanged">
+                        <option value="10">10개</option>
+                        <option value="20">20개</option>
+                        <option value="50">50개</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if (employees.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>직원 정보</th>
+                                    <th>부서/직급</th>
+                                    <th>매니저</th>
+                                    <th>급여</th>
+                                    <th>기술 스택</th>
+                                    <th>프로젝트</th>
+                                    <th>활용도</th>
+                                    <th>상태</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var employee in employees)
+                                {
+                                    <tr class="@(employee.IsActive ? "" : "table-secondary")">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="avatar-circle me-2">
+                                                    @employee.Name.Substring(0, 1).ToUpper()
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold">@employee.Name</div>
+                                                    <small class="text-muted">@employee.Email</small>
+                                                    <div><small class="text-muted">입사: @employee.HireDate.ToString("yyyy-MM-dd")</small></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div>
+                                                @if (!string.IsNullOrEmpty(employee.DepartmentName))
+                                                {
+                                                    <span class="badge bg-primary">@employee.DepartmentName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">미배정</span>
+                                                }
+                                            </div>
+                                            <div class="mt-1">
+                                                @if (!string.IsNullOrEmpty(employee.PositionTitle))
+                                                {
+                                                    <small class="text-muted">@employee.PositionTitle</small>
+                                                }
+                                                else
+                                                {
+                                                    <small class="text-muted">직급 미배정</small>
+                                                }
+                                            </div>
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(employee.ManagerName))
+                                            {
+                                                <span class="text-success">
+                                                    <i class="fas fa-user-tie me-1"></i>@employee.ManagerName
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">
+                                                    <i class="fas fa-user-slash me-1"></i>매니저 없음
+                                                </span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="fw-bold">@employee.Salary.ToString("N0")만원</span>
+                                            <div>
+                                                <small class="text-muted">연차: @@employee.LeaveBalance일</small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            @if (employee.Skills.Any())
+                                            {
+                                                <div class="skill-tags">
+                                                    @foreach (var skill in employee.Skills.Take(3))
+                                                    {
+                                                        <span class="badge badge-skill-@skill.SkillLevel.ToString().ToLower() me-1 mb-1">
+                                                            @skill.Technology
+                                                        </span>
+                                                    }
+                                                    @if (employee.Skills.Count > 3)
+                                                    {
+                                                        <span class="badge bg-light text-dark">+@(employee.Skills.Count - 3)</span>
+                                                    }
+                                                </div>
+                                                <div>
+                                                    <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => OpenSkillsModal(employee)">
+                                                        <small>기술 관리</small>
+                                                    </button>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">기술 정보 없음</span>
+                                                <div>
+                                                    <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => OpenSkillsModal(employee)">
+                                                        <small>기술 추가</small>
+                                                    </button>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="text-center">
+                                                <span class="badge bg-info">@@employee.CurrentProjectsCount개</span>
+                                                <div>
+                                                    <small class="text-muted">@employee.TotalHoursThisMonth.ToString("F1")h</small>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="progress" style="height: 8px;">
+                                                <div class="progress-bar @GetUtilizationColor(employee.UtilizationRate)"
+                                                     role="progressbar"
+                                                     style="width: @Math.Min(employee.UtilizationRate, 100)%"></div>
+                                            </div>
+                                            <small class="text-muted">@employee.UtilizationRate.ToString("F1")%</small>
+                                        </td>
+                                        <td>
+                                            @if (employee.IsActive)
+                                            {
+                                                <span class="badge bg-success">활성</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger">비활성</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-outline-info btn-sm"
+                                                        @onclick="() => OpenEmployeeDetailModal(employee)" title="상세보기">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary btn-sm"
+                                                        @onclick="() => OpenEmployeeModal(employee)" title="수정">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-warning btn-sm"
+                                                        @onclick="() => ToggleEmployeeStatus(employee)"
+                                                        title="@(employee.IsActive ? "비활성화" : "활성화")">
+                                                    <i class="fas @(employee.IsActive ? "fa-user-slash" : "fa-user-check")"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 페이징 -->
+                    @if (totalPages > 1)
+                    {
+                        <div class="card-footer">
+                            <nav aria-label="직원 목록 페이징">
+                                <ul class="pagination pagination-sm justify-content-center mb-0">
+                                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                        <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">이전</button>
+                                    </li>
+
+                                    @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                                    {
+                                        <li class="page-item @(currentPage == i ? "active" : "")">
+                                            <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                        </li>
+                                    }
+
+                                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                        <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">다음</button>
+                                    </li>
+                                </ul>
+                            </nav>
+                            <div class="text-center mt-2">
+                                <small class="text-muted">
+                                    총 @@totalCount명 중 @((currentPage - 1) * pageSize + 1)~@Math.Min(currentPage * pageSize, totalCount)명 표시
+                                </small>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-4">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">직원이 없습니다</h5>
+                        <p class="text-muted">새 직원을 추가해보세요.</p>
+                        <button type="button" class="btn btn-primary" @onclick="() => OpenEmployeeModal()">
+                            <i class="fas fa-user-plus me-2"></i>직원 추가
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- 직원 생성/수정 모달 -->
+<EmployeeFormModal @ref="employeeFormModal"
+                   OnEmployeeSaved="OnEmployeeSaved"
+                   Departments="departments"
+                   Positions="positions"
+                   Employees="employees" />
+
+<!-- 기술 스택 관리 모달 -->
+<EmployeeSkillsModal @ref="skillsModal" OnSkillsUpdated="OnSkillsUpdated" />
+
+<!-- 직원 상세 모달 -->
+<EmployeeDetailModal @ref="detailModal" />
+
+@code {
+    // 데이터
+    private List<EmployeeDto> employees = new();
+    private List<DepartmentDto> departments = new();
+    private List<PositionDto> positions = new();
+    private EmployeeStatistics? _statistics;
+
+    // UI 상태
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private string selectedDepartmentId = string.Empty;
+    private string selectedPositionId = string.Empty;
+    private string statusFilter = string.Empty;
+
+    // 페이징
+    private int currentPage = 1;
+    private int pageSize = 20;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+
+    // 모달 관련
+    private EmployeeFormModal employeeFormModal = default!;
+    private EmployeeSkillsModal skillsModal = default!;
+    private EmployeeDetailModal detailModal = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 병렬로 데이터 로드
+            var employeesTask = LoadEmployees();
+            var departmentsTask = DepartmentService.GetAllDepartmentsAsync();  // 수정
+            var positionsTask = PositionService.GetAllPositionsAsync();       // 수정
+            var statisticsTask = EmployeeService.GetEmployeeStatisticsAsync();
+
+            await Task.WhenAll(employeesTask, departmentsTask, positionsTask, statisticsTask);
+
+            departments = await departmentsTask;
+            positions = await positionsTask;
+            var statsResponse = await statisticsTask;
+            _statistics = statsResponse.Success ? statsResponse.Data : null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadEmployees()
+    {
+        try
+        {
+            Guid? deptId = !string.IsNullOrEmpty(selectedDepartmentId) ? Guid.Parse(selectedDepartmentId) : null;
+
+            var response = await EmployeeService.GetEmployeesAsync(currentPage, pageSize, searchTerm, deptId);
+
+            if (response.Success && response.Data != null)
+            {
+                employees = response.Data.Items;
+                totalCount = response.Data.TotalCount;
+                currentPage = response.Data.PageNumber;
+            }
+            else
+            {
+                employees = new List<EmployeeDto>();
+                totalCount = 0;
+            }
+
+            // 추가 필터링 (Position, Status)
+            ApplyClientSideFilters();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 목록 로드 중 오류 발생");
+            employees = new List<EmployeeDto>();
+            totalCount = 0;
+        }
+    }
+
+    private void ApplyClientSideFilters()
+    {
+        var filteredEmployees = employees.AsEnumerable();
+
+        // 직급 필터
+        if (!string.IsNullOrEmpty(selectedPositionId) && Guid.TryParse(selectedPositionId, out var posId))
+        {
+            filteredEmployees = filteredEmployees.Where(e => e.PositionId == posId);
+        }
+
+        // 상태 필터
+        if (!string.IsNullOrEmpty(statusFilter))
+        {
+            if (statusFilter == "active")
+                filteredEmployees = filteredEmployees.Where(e => e.IsActive);
+            else if (statusFilter == "inactive")
+                filteredEmployees = filteredEmployees.Where(e => !e.IsActive);
+        }
+
+        employees = filteredEmployees.ToList();
+        StateHasChanged();
+    }
+
+    private async Task OnSearchChanged(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        await Task.Delay(300); // 디바운싱
+        currentPage = 1;
+        await LoadEmployees();
+    }
+
+    private async Task OnDepartmentFilterChanged(ChangeEventArgs e)
+    {
+        selectedDepartmentId = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
+        await LoadEmployees();
+    }
+
+    private async Task OnPositionFilterChanged(ChangeEventArgs e)
+    {
+        selectedPositionId = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
+        await LoadEmployees();
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        statusFilter = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
+        await LoadEmployees();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newPageSize))
+        {
+            pageSize = newPageSize;
+            currentPage = 1;
+            await LoadEmployees();
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            await LoadEmployees();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private async Task OpenEmployeeModal(EmployeeDto? employee = null)
+    {
+        await employeeFormModal.OpenAsync(employee);
+    }
+
+    private async Task OpenSkillsModal(EmployeeDto employee)
+    {
+        await skillsModal.OpenAsync(employee);
+    }
+
+    private async Task OpenEmployeeDetailModal(EmployeeDto employee)
+    {
+        await detailModal.OpenAsync(employee);
+    }
+
+    private async Task OnEmployeeSaved()
+    {
+        await LoadData();
+    }
+
+    private async Task OnSkillsUpdated()
+    {
+        await LoadEmployees(); // 기술 정보만 다시 로드
+    }
+
+    private async Task ToggleEmployeeStatus(EmployeeDto employee)
+    {
+        try
+        {
+            var updateRequest = new UpdateEmployeeRequest
+            {
+                Email = employee.Email,
+                Name = employee.Name,
+                DepartmentId = employee.DepartmentId,
+                PositionId = employee.PositionId,
+                ManagerId = employee.ManagerId,
+                HireDate = employee.HireDate,
+                Salary = employee.Salary,
+                LeaveBalance = employee.LeaveBalance,
+                IsActive = !employee.IsActive
+            };
+
+            var result = await EmployeeService.UpdateEmployeeAsync(employee.Id, updateRequest);
+            if (result != null)
+            {
+                await LoadEmployees();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "직원 상태 변경에 실패했습니다.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 상태 변경 중 오류 발생: {EmployeeId}", employee.Id);
+            await JSRuntime.InvokeVoidAsync("alert", "직원 상태 변경 중 오류가 발생했습니다.");
+        }
+    }
+
+    private async Task ExportEmployees()
+    {
+        // TODO: CSV 또는 Excel 내보내기 구현
+        await JSRuntime.InvokeVoidAsync("alert", "내보내기 기능은 곧 구현됩니다.");
+    }
+
+    private string GetUtilizationColor(decimal utilization)
+    {
+        return utilization switch
+        {
+            >= 90 => "bg-danger",
+            >= 80 => "bg-warning",
+            >= 60 => "bg-success",
+            _ => "bg-info"
+        };
+    }
+}
+
+<style>
+    .avatar-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(45deg, #007bff, #6610f2);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 16px;
+    }
+
+    .skill-tags {
+        max-width: 150px;
+    }
+
+    .badge-skill-beginner {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+
+    .badge-skill-intermediate {
+        background-color: #e8f5e8;
+        color: #2e7d32;
+    }
+
+    .badge-skill-expert {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+
+    .table th {
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 0.875rem;
+    }
+
+    .table td {
+        vertical-align: middle;
+        font-size: 0.875rem;
+    }
+
+    .btn-group .btn {
+        border-radius: 0.25rem;
+    }
+
+    .opacity-75 {
+        opacity: 0.75;
+    }
+
+    .progress {
+        background-color: #e9ecef;
+    }
+</style>

@@ -1,0 +1,581 @@
+﻿@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Department
+@using TechFlowERP.Models.DTOs.Position
+@using TechFlowERP.Models.Requests.Employee
+@using TechFlowERP.Web.Services.Interfaces
+@inject IEmployeeService EmployeeService
+@inject IJSRuntime JSRuntime
+@inject ILogger<EmployeeFormModal> Logger
+
+<div class="modal fade" id="employeeModal" tabindex="-1" aria-labelledby="employeeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="employeeModalLabel">
+                    <i class="fas fa-user me-2"></i>
+                    @(isEditMode ? "직원 정보 수정" : "새 직원 추가")
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <EditForm Model="formModel" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="modal-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">처리 중...</span>
+                            </div>
+                            <p class="mt-2 text-muted">@(isEditMode ? "수정" : "저장") 중입니다...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- 기본 정보 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3">
+                                    <i class="fas fa-user me-2"></i>기본 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">
+                                        이름 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputText id="name" class="form-control" @bind-Value="formModel.Name"
+                                               placeholder="예: 홍길동" />
+                                    <ValidationMessage For="() => formModel.Name" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">
+                                        이메일 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputText id="email" class="form-control" @bind-Value="formModel.Email"
+                                               placeholder="예: hong@company.com" />
+                                    <ValidationMessage For="() => formModel.Email" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="hireDate" class="form-label">
+                                        입사일 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputDate id="hireDate" class="form-control" @bind-Value="formModel.HireDate" />
+                                    <ValidationMessage For="() => formModel.HireDate" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="salary" class="form-label">
+                                        급여 (만원) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <InputNumber id="salary" class="form-control" @bind-Value="formModel.Salary"
+                                                     min="0" step="10" @bind-Value:event="onchange" />
+                                        <span class="input-group-text">만원</span>
+                                    </div>
+                                    <ValidationMessage For="() => formModel.Salary" class="text-danger" />
+                                    @if (selectedPosition != null && (formModel.Salary < selectedPosition.MinSalary || formModel.Salary > selectedPosition.MaxSalary))
+                                    {
+                                        <div class="form-text text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            권장 급여 범위: @selectedPosition.MinSalary.ToString("N0")~@selectedPosition.MaxSalary.ToString("N0")만원
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="leaveBalance" class="form-label">연차 잔여일수</label>
+                                    <div class="input-group">
+                                        <InputNumber id="leaveBalance" class="form-control" @bind-Value="formModel.LeaveBalance"
+                                                     min="0" max="365" />
+                                        <span class="input-group-text">일</span>
+                                    </div>
+                                    <ValidationMessage For="() => formModel.LeaveBalance" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <!-- 조직 정보 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-sitemap me-2"></i>조직 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="departmentId" class="form-label">부서</label>
+                                    <select id="departmentId" class="form-select" value="@formModel.DepartmentId" @onchange="OnDepartmentChanged">
+                                        <option value="">부서 선택</option>
+                                        @foreach (var dept in Departments)
+                                        {
+                                            <option value="@dept.Id">@dept.Name</option>
+                                        }
+                                    </select>
+                                    <ValidationMessage For="() => formModel.DepartmentId" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="positionId" class="form-label">직급</label>
+                                    <select id="positionId" class="form-select" value="@formModel.PositionId" @onchange="OnPositionChanged">
+                                        <option value="">직급 선택</option>
+                                        @foreach (var pos in Positions.OrderBy(p => p.Level))
+                                        {
+                                            <option value="@pos.Id">
+                                                @pos.Title (레벨 @pos.Level)
+                                                @if (pos.IsManagementPosition)
+                                                {
+                                                    <text> 👑</text>
+                                                }
+                                            </option>
+                                        }
+                                    </select>
+                                    <ValidationMessage For="() => formModel.PositionId" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="managerId" class="form-label">매니저</label>
+                                    <select id="managerId" class="form-select" value="@formModel.ManagerId" @onchange="OnManagerChanged">
+                                        <option value="">매니저 선택</option>
+                                        @foreach (var manager in availableManagers)
+                                        {
+                                            <option value="@manager.Id">
+                                                @manager.Name (@manager.PositionTitle)
+                                            </option>
+                                        }
+                                    </select>
+                                    <ValidationMessage For="() => formModel.ManagerId" class="text-danger" />
+                                    <div class="form-text">
+                                        관리직 직급의 직원들이 매니저로 표시됩니다.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 추가 설정 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-cog me-2"></i>추가 설정
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <InputCheckbox id="isActive" class="form-check-input" @bind-Value="formModel.IsActive" />
+                                        <label class="form-check-label" for="isActive">
+                                            활성 상태
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        비활성 상태의 직원은 새 프로젝트에 할당할 수 없습니다.
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if (!isEditMode)
+                            {
+                                <!-- 초기 기술 스택 (신규 직원용) -->
+                                <div class="col-12">
+                                    <h6 class="text-primary mb-3 mt-3">
+                                        <i class="fas fa-code me-2"></i>초기 기술 스택 (선택사항)
+                                    </h6>
+
+                                    @for (int i = 0; i < formModel.Skills.Count; i++)
+                                    {
+                                        var index = i; // 클로저 이슈 방지
+                                                       <div class="row mb-2">
+                                                           <div class="col-md-4">
+                                                               <input type="text" class="form-control" placeholder="기술명 (예: C#, React)"
+                                                                      @bind="formModel.Skills[index].Technology" />
+                                                           </div>
+                                                           <div class="col-md-3">
+                                                               <select class="form-select" @bind="formModel.Skills[index].SkillLevel">
+                                                                   <option value="0">초급</option>
+                                                                   <option value="1">중급</option>
+                                                                   <option value="2">고급</option>
+                                                               </select>
+                                                           </div>
+                                                           <div class="col-md-3">
+                                                               <input type="number" class="form-control" placeholder="경력(년)"
+                                                                      @bind="formModel.Skills[index].YearsExperience" min="0" max="50" />
+                                                           </div>
+                                                           <div class="col-md-2">
+                                                               <button type="button" class="btn btn-outline-danger btn-sm"
+                                                                       @onclick="() => RemoveSkill(index)">
+                                                                   <i class="fas fa-times"></i>
+                                                               </button>
+                                                           </div>
+                                                       </div>
+                                    }
+
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @onclick="AddSkill">
+                                        <i class="fas fa-plus me-2"></i>기술 추가
+                                    </button>
+                                </div>
+                            }
+
+                            <!-- 미리보기 정보 -->
+                            @if (selectedPosition != null || selectedDepartment != null)
+                            {
+                                <div class="col-12">
+                                    <div class="card bg-light mt-3">
+                                        <div class="card-body">
+                                            <h6 class="card-title">배정 정보 미리보기</h6>
+                                            <div class="row">
+                                                @if (selectedDepartment != null)
+                                                {
+                                                    <div class="col-md-6">
+                                                        <strong>부서:</strong> @selectedDepartment.Name<br />
+                                                        <small class="text-muted">
+                                                            현재 인원: @@selectedDepartment.EmployeeCount명
+                                                            @if (!string.IsNullOrEmpty(selectedDepartment.ManagerName))
+                                                            {
+                                                            @* <br />
+                                                            부서장: @selectedDepartment.ManagerName *@
+                                                            }
+                                                        </small>
+                                                    </div>
+                                                }
+                                                @if (selectedPosition != null)
+                                                {
+                                                    <div class="col-md-6">
+                                                        <strong>직급:</strong> @selectedPosition.Title (레벨 @selectedPosition.Level)<br />
+                                                        <small class="text-muted">
+                                                            급여 범위: @selectedPosition.MinSalary.ToString("N0")~@selectedPosition.MaxSalary.ToString("N0")만원<br />
+                                                            @if (selectedPosition.IsManagementPosition)
+                                                            {
+                                                                <span class="badge bg-warning text-dark">관리직</span>
+                                                            }
+                                                        </small>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled="@isLoading">
+                        취소
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@(isLoading || !IsFormValid())">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i>
+                        }
+                        @(isEditMode ? "수정" : "저장")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnEmployeeSaved { get; set; }
+    [Parameter] public List<DepartmentDto> Departments { get; set; } = new();
+    [Parameter] public List<PositionDto> Positions { get; set; } = new();
+    [Parameter] public List<EmployeeDto> Employees { get; set; } = new();
+
+    private bool isEditMode = false;
+    private bool isLoading = false;
+    private Guid? currentEmployeeId = null;
+
+    private EmployeeFormModel formModel = new();
+    private DepartmentDto? selectedDepartment = null;
+    private PositionDto? selectedPosition = null;
+    private List<EmployeeDto> availableManagers = new();
+
+    public async Task OpenAsync(EmployeeDto? employee = null)
+    {
+        isEditMode = employee != null;
+        currentEmployeeId = employee?.Id;
+
+        if (isEditMode && employee != null)
+        {
+            // 수정 모드: 기존 데이터 로드
+            formModel = new EmployeeFormModel
+            {
+                Email = employee.Email,
+                Name = employee.Name,
+                DepartmentId = employee.DepartmentId,
+                PositionId = employee.PositionId,
+                ManagerId = employee.ManagerId,
+                HireDate = employee.HireDate,
+                Salary = employee.Salary,
+                LeaveBalance = employee.LeaveBalance,
+                IsActive = employee.IsActive
+            };
+        }
+        else
+        {
+            // 생성 모드: 빈 폼
+            formModel = new EmployeeFormModel();
+            formModel.Skills.Add(new CreateEmployeeSkillRequest()); // 첫 번째 기술 필드
+        }
+
+        UpdateSelectedObjects();
+        UpdateAvailableManagers();
+
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('employeeModal')).show()");
+        StateHasChanged();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (!IsFormValid()) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (isEditMode && currentEmployeeId.HasValue)
+            {
+                // 수정
+                var updateRequest = new UpdateEmployeeRequest
+                {
+                    Email = formModel.Email,
+                    Name = formModel.Name,
+                    DepartmentId = formModel.DepartmentId,
+                    PositionId = formModel.PositionId,
+                    ManagerId = formModel.ManagerId,
+                    HireDate = formModel.HireDate,
+                    Salary = formModel.Salary,
+                    LeaveBalance = formModel.LeaveBalance,
+                    IsActive = formModel.IsActive
+                };
+
+                var result = await EmployeeService.UpdateEmployeeAsync(currentEmployeeId.Value, updateRequest);
+
+                if (result != null)
+                {
+                    await OnEmployeeSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "직원 수정에 실패했습니다.");
+                }
+            }
+            else
+            {
+                // 생성
+                var createRequest = new CreateEmployeeRequest
+                {
+                    Email = formModel.Email,
+                    Name = formModel.Name,
+                    DepartmentId = formModel.DepartmentId,
+                    PositionId = formModel.PositionId,
+                    ManagerId = formModel.ManagerId,
+                    HireDate = formModel.HireDate,
+                    Salary = formModel.Salary,
+                    LeaveBalance = formModel.LeaveBalance,
+                    IsActive = formModel.IsActive,
+                    Skills = formModel.Skills.Where(s => !string.IsNullOrWhiteSpace(s.Technology)).ToList()
+                };
+
+                var result = await EmployeeService.CreateEmployeeAsync(createRequest);
+
+                if (result != null)
+                {
+                    await OnEmployeeSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "직원 생성에 실패했습니다.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 {Action} 중 오류 발생", isEditMode ? "수정" : "생성");
+            await JSRuntime.InvokeVoidAsync("alert", $"직원 {(isEditMode ? "수정" : "생성")} 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('employeeModal')).hide()");
+    }
+
+    private void OnDepartmentChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var deptId))
+        {
+            formModel.DepartmentId = deptId;
+        }
+        else
+        {
+            formModel.DepartmentId = null;
+        }
+        UpdateSelectedObjects();
+    }
+
+    private void OnPositionChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var posId))
+        {
+            formModel.PositionId = posId;
+        }
+        else
+        {
+            formModel.PositionId = null;
+        }
+
+        UpdateSelectedObjects();
+        UpdateAvailableManagers();
+
+        // 직급 변경 시 급여 자동 설정 (신규 생성 시에만)
+        if (!isEditMode && selectedPosition != null && formModel.Salary == 0)
+        {
+            formModel.Salary = (selectedPosition.MinSalary + selectedPosition.MaxSalary) / 2;
+        }
+    }
+
+    private void OnManagerChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var managerId))
+        {
+            formModel.ManagerId = managerId;
+        }
+        else
+        {
+            formModel.ManagerId = null;
+        }
+    }
+
+    private void OnSalaryChanged()
+    {
+        // 급여 변경 시 별도 처리가 필요하면 여기에 추가
+        StateHasChanged(); // 급여 범위 경고 업데이트
+    }
+
+    private void UpdateSelectedObjects()
+    {
+        selectedDepartment = formModel.DepartmentId.HasValue
+            ? Departments.FirstOrDefault(d => d.Id == formModel.DepartmentId.Value)
+            : null;
+
+        selectedPosition = formModel.PositionId.HasValue
+            ? Positions.FirstOrDefault(p => p.Id == formModel.PositionId.Value)
+            : null;
+    }
+
+    private void UpdateAvailableManagers()
+    {
+        // 관리직 직급의 활성 직원들을 매니저로 표시
+        var managementPositionIds = Positions.Where(p => p.IsManagementPosition).Select(p => p.Id).ToList();
+
+        availableManagers = Employees
+            .Where(e => e.IsActive &&
+                       e.PositionId.HasValue &&
+                       managementPositionIds.Contains(e.PositionId.Value) &&
+                       e.Id != currentEmployeeId) // 자기 자신 제외
+            .OrderBy(e => e.Name)
+            .ToList();
+    }
+
+    private void AddSkill()
+    {
+        formModel.Skills.Add(new CreateEmployeeSkillRequest());
+        StateHasChanged();
+    }
+
+    private void RemoveSkill(int index)
+    {
+        if (formModel.Skills.Count > 1)
+        {
+            formModel.Skills.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(formModel.Name) &&
+               !string.IsNullOrWhiteSpace(formModel.Email) &&
+               formModel.HireDate != default &&
+               formModel.Salary >= 0 &&
+               formModel.LeaveBalance >= 0;
+    }
+
+    // 폼 모델 클래스
+    private class EmployeeFormModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public Guid? DepartmentId { get; set; }
+        public Guid? PositionId { get; set; }
+        public Guid? ManagerId { get; set; }
+        public DateTime HireDate { get; set; } = DateTime.Today;
+        public decimal Salary { get; set; } = 0;
+        public int LeaveBalance { get; set; } = 15;
+        public bool IsActive { get; set; } = true;
+        public List<CreateEmployeeSkillRequest> Skills { get; set; } = new();
+    }
+}
+
+<style>
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+    .form-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .input-group-text {
+        background-color: #e9ecef;
+        border-color: #ced4da;
+    }
+
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+
+    .badge {
+        font-size: 0.75rem;
+    }
+</style>

@@ -1,0 +1,110 @@
+@using MudBlazor
+@using TechFlowERP.Models.DTOs
+
+<div class="breadcrumb-container">
+    <MudBreadcrumbs Items="@MudBreadcrumbItems"
+                    Separator="/"
+                    MaxItems="@((byte?)MaxItems)"
+                    Class="breadcrumb-nav">
+        <ItemTemplate Context="item">
+            @if (!string.IsNullOrEmpty(item.Href))
+            {
+                <MudLink Href="@item.Href"
+                         Color="Color.Primary"
+                         Class="breadcrumb-link">
+                    @if (!string.IsNullOrEmpty(item.Icon))
+                    {
+                        <MudIcon Icon="@item.Icon" Size="Size.Small" Class="mr-1" />
+                    }
+                    @item.Text
+                </MudLink>
+            }
+            else
+            {
+                <MudText Color="Color.Secondary" Class="breadcrumb-current">
+                    @if (!string.IsNullOrEmpty(item.Icon))
+                    {
+                        <MudIcon Icon="@item.Icon" Size="Size.Small" Class="mr-1" />
+                    }
+                    @item.Text
+                </MudText>
+            }
+        </ItemTemplate>
+    </MudBreadcrumbs>
+</div>
+
+<style>
+    .breadcrumb-container {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(0,0,0,0.12);
+        margin-bottom: 1rem;
+    }
+
+    .breadcrumb-nav {
+        font-size: 0.875rem;
+    }
+
+    .breadcrumb-link {
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+    }
+
+        .breadcrumb-link:hover {
+            text-decoration: underline;
+        }
+
+    .breadcrumb-current {
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// 브레드크럼 항목들
+    /// </summary>
+    [Parameter] public List<TechFlowERP.Models.DTOs.BreadcrumbItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 최대 표시 항목 수
+    /// </summary>
+    [Parameter] public int MaxItems { get; set; } = 8;
+
+    /// <summary>
+    /// 현재 페이지 제목
+    /// </summary>
+    [Parameter] public string CurrentPage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 현재 페이지 아이콘
+    /// </summary>
+    [Parameter] public string CurrentPageIcon { get; set; } = string.Empty;
+
+    private List<MudBlazor.BreadcrumbItem> MudBreadcrumbItems = new();
+
+    protected override void OnParametersSet()
+    {
+        // 우리의 BreadcrumbItem을 MudBlazor.BreadcrumbItem으로 변환
+        MudBreadcrumbItems = Items.Select(item => new MudBlazor.BreadcrumbItem(
+            text: item.Text,
+            href: item.Href,
+            icon: item.Icon
+        )).ToList();
+
+        // 현재 페이지가 설정되어 있고 마지막 항목이 현재 페이지가 아니면 추가
+        if (!string.IsNullOrEmpty(CurrentPage))
+        {
+            var lastItem = Items.LastOrDefault();
+            if (lastItem == null || lastItem.Text != CurrentPage)
+            {
+                MudBreadcrumbItems.Add(new MudBlazor.BreadcrumbItem(
+                    text: CurrentPage,
+                    href: null,
+                    icon: CurrentPageIcon
+                ));
+            }
+        }
+    }
+}

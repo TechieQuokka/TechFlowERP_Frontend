@@ -1,0 +1,835 @@
+﻿@page "/time-tracking"
+@page "/time-entries"
+@using TechFlowERP.Models.DTOs.TimeEntry
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.TimeEntry
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject ITimeEntryService TimeEntryService
+@inject IProjectService ProjectService
+@inject IEmployeeService EmployeeService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<TimeEntryList> Logger
+
+<PageTitle>시간 관리</PageTitle>
+
+<div class="container-fluid">
+    <!-- 📊 Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-clock me-2"></i>시간 관리
+                    </h2>
+                    <p class="text-muted mb-0">프로젝트별 시간 기록을 관리하고 승인하세요</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary" @onclick="NavigateToTimeSheet">
+                        <i class="fas fa-calendar-alt me-2"></i>타임시트
+                    </button>
+                    <button class="btn btn-outline-success" @onclick="NavigateToApproval">
+                        <i class="fas fa-check-circle me-2"></i>승인 관리
+                    </button>
+                    <button class="btn btn-primary" @onclick="ShowAddTimeEntryModal">
+                        <i class="fas fa-plus me-2"></i>시간 기록 추가
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔍 Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- 기간 필터 -->
+                        <div class="col-md-3">
+                            <label class="form-label">시작일</label>
+                            <input type="date" class="form-control" @bind="filterStartDate" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">종료일</label>
+                            <input type="date" class="form-control" @bind="filterEndDate" />
+                        </div>
+
+                        <!-- 직원 필터 -->
+                        <div class="col-md-3">
+                            <label class="form-label">직원</label>
+                            <select class="form-select" @bind="selectedEmployeeId">
+                                <option value="">전체 직원</option>
+                                @foreach (var employee in employees)
+                                {
+                                    <option value="@employee.Id">@employee.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- 프로젝트 필터 -->
+                        <div class="col-md-3">
+                            <label class="form-label">프로젝트</label>
+                            <select class="form-select" @bind="selectedProjectId">
+                                <option value="">전체 프로젝트</option>
+                                @foreach (var project in projects)
+                                {
+                                    <option value="@project.Id">@project.Name</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- 승인 상태 필터 -->
+                        <div class="col-md-6">
+                            <label class="form-label">승인 상태</label>
+                            <select class="form-select" @bind="selectedApprovalStatus">
+                                <option value="">전체</option>
+                                <option value="pending">승인 대기</option>
+                                <option value="approved">승인됨</option>
+                                <option value="rejected">거부됨</option>
+                            </select>
+                        </div>
+
+                        <!-- 빌러블 필터 -->
+                        <div class="col-md-6">
+                            <label class="form-label">빌러블</label>
+                            <select class="form-select" @bind="selectedBillableFilter">
+                                <option value="">전체</option>
+                                <option value="true">빌러블</option>
+                                <option value="false">논빌러블</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button class="btn btn-outline-primary me-2" @onclick="ApplyFilters">
+                                <i class="fas fa-filter me-1"></i>필터 적용
+                            </button>
+                            <button class="btn btn-outline-secondary me-2" @onclick="ClearFilters">
+                                <i class="fas fa-times me-1"></i>필터 초기화
+                            </button>
+                            <button class="btn btn-outline-info" @onclick="ExportTimeEntries">
+                                <i class="fas fa-download me-1"></i>엑셀 내보내기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">총 시간</h6>
+                            <h3 class="mb-0">@GetTotalHours().ToString("F1")시간</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">빌러블 시간</h6>
+                            <h3 class="mb-0">@GetBillableHours().ToString("F1")시간</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-dollar-sign fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">승인 대기</h6>
+                            <h3 class="mb-0">@timeEntries.Count(t => !t.Approved)</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-hourglass-half fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title mb-1">빌러블 비율</h6>
+                            <h3 class="mb-0">@GetBillablePercentage().ToString("F1")%</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chart-pie fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📋 Time Entries Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">시간 기록 목록</h5>
+                    <div class="d-flex align-items-center">
+                        <small class="text-muted me-3">총 @@filteredTimeEntries.Count개</small>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" @onclick="RefreshData">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if (isLoading)
+                    {
+                        <LoadingSpinner />
+                    }
+                    else if (!filteredTimeEntries.Any())
+                    {
+                        <div class="text-center py-5">
+                            <i class="fas fa-clock fa-3x text-muted mb-3"></i>
+                            <h5>시간 기록이 없습니다</h5>
+                            <p class="text-muted">새로운 시간 기록을 추가해보세요.</p>
+                            <button class="btn btn-primary" @onclick="ShowAddTimeEntryModal">
+                                <i class="fas fa-plus me-2"></i>첫 번째 시간 기록 추가
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>날짜</th>
+                                        <th>직원</th>
+                                        <th>프로젝트</th>
+                                        <th>작업 내용</th>
+                                        <th>시간</th>
+                                        <th>빌러블</th>
+                                        <th>승인 상태</th>
+                                        <th class="text-center">작업</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var entry in GetPagedTimeEntries())
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-semibold">@entry.Date.ToString("yyyy-MM-dd")</div>
+                                                <small class="text-muted">@entry.Date.ToString("dddd")</small>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                                        <span class="text-white fw-bold">@GetInitials(entry.EmployeeName)</span>
+                                                    </div>
+                                                    <div>
+                                                        <a href="/employees/@entry.EmployeeId" class="text-decoration-none fw-semibold">
+                                                            @entry.EmployeeName
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <a href="/projects/@entry.ProjectId" class="text-decoration-none fw-semibold">
+                                                        @entry.ProjectName
+                                                    </a>
+                                                    @if (!string.IsNullOrEmpty(entry.ProjectCode))
+                                                    {
+                                                        <br>
+
+                                                        <small class="text-muted">@entry.ProjectCode</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    @if (!string.IsNullOrEmpty(entry.TaskDescription))
+                                                    {
+                                                        <span>@TruncateText(entry.TaskDescription, 50)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">설명 없음</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold">@entry.Hours.ToString("F1")시간</div>
+                                                <small class="text-muted">@FormatHoursToTime(entry.Hours)</small>
+                                            </td>
+                                            <td>
+                                                @if (entry.Billable)
+                                                {
+                                                    <span class="badge bg-success">빌러블</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">논빌러블</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (entry.Approved)
+                                                {
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check me-1"></i>승인됨
+                                                    </span>
+                                                    @if (!string.IsNullOrEmpty(entry.ApprovedByName))
+                                                    {
+                                                        <br>
+
+                                                        <small class="text-muted">@entry.ApprovedByName</small>
+                                                    }
+                                                    @if (entry.ApprovedAt.HasValue)
+                                                    {
+                                                        <br>
+
+                                                        <small class="text-muted">@entry.ApprovedAt.Value.ToString("MM-dd HH:mm")</small>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning">
+                                                        <i class="fas fa-hourglass-half me-1"></i>대기중
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary"
+                                                            @onclick="() => EditTimeEntry(entry)"
+                                                            title="수정">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    @if (!entry.Approved)
+                                                    {
+                                                        <button class="btn btn-outline-success"
+                                                                @onclick="() => ApproveTimeEntry(entry)"
+                                                                title="승인">
+                                                            <i class="fas fa-check"></i>
+                                                        </button>
+                                                    }
+                                                    <button class="btn btn-outline-danger"
+                                                            @onclick="() => ConfirmDelete(entry)"
+                                                            title="삭제">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 페이징 -->
+                        @if (totalPages > 1)
+                        {
+                            <div class="card-footer">
+                                <nav aria-label="시간 기록 페이징">
+                                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                            <button class="page-link" @onclick="() => ChangePage(currentPage - 1)">이전</button>
+                                        </li>
+
+                                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                                <button class="page-link" @onclick="() => ChangePage(i)">@i</button>
+                                            </li>
+                                        }
+
+                                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                            <button class="page-link" @onclick="() => ChangePage(currentPage + 1)">다음</button>
+                                        </li>
+                                    </ul>
+                                </nav>
+
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        @((currentPage - 1) * pageSize + 1) - @Math.Min(currentPage * pageSize, filteredTimeEntries.Count) / @@filteredTimeEntries.Count개
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 시간 기록 추가/수정 모달 -->
+@if (showTimeEntryModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingTimeEntry != null ? "시간 기록 수정" : "시간 기록 추가")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseTimeEntryModal"></button>
+                </div>
+                <EditForm Model="timeEntryRequest" OnValidSubmit="SaveTimeEntry">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">날짜</label>
+                                <InputDate @bind-Value="timeEntryRequest.Date" class="form-control" />
+                                <ValidationMessage For="@(() => timeEntryRequest.Date)" class="text-danger" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">시간</label>
+                                <InputNumber @bind-Value="timeEntryRequest.Hours" class="form-control" step="0.25" placeholder="8.0" />
+                                <ValidationMessage For="@(() => timeEntryRequest.Hours)" class="text-danger" />
+                                <small class="text-muted">0.25 단위로 입력 (예: 1.5시간)</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">직원</label>
+                                <InputSelect @bind-Value="timeEntryRequest.EmployeeId" class="form-select">
+                                    <option value="@Guid.Empty">직원 선택</option>
+                                    @foreach (var employee in employees)
+                                    {
+                                        <option value="@employee.Id">@employee.Name</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => timeEntryRequest.EmployeeId)" class="text-danger" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">프로젝트</label>
+                                <InputSelect @bind-Value="timeEntryRequest.ProjectId" class="form-select">
+                                    <option value="@Guid.Empty">프로젝트 선택</option>
+                                    @foreach (var project in projects)
+                                    {
+                                        <option value="@project.Id">@project.Name</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => timeEntryRequest.ProjectId)" class="text-danger" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">작업 내용</label>
+                                <InputTextArea @bind-Value="timeEntryRequest.TaskDescription"
+                                               class="form-control"
+                                               rows="3"
+                                               placeholder="수행한 작업의 상세 내용을 입력하세요..." />
+                                <ValidationMessage For="@(() => timeEntryRequest.TaskDescription)" class="text-danger" />
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <InputCheckbox @bind-Value="timeEntryRequest.Billable"
+                                                   class="form-check-input"
+                                                   id="billable" />
+                                    <label class="form-check-label" for="billable">
+                                        빌러블 시간 (클라이언트에게 청구 가능한 시간)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseTimeEntryModal">취소</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            @(editingTimeEntry != null ? "수정" : "추가")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .avatar-sm {
+        width: 32px;
+        height: 32px;
+    }
+</style>
+
+@code {
+    // 📊 Data Properties
+    private List<TimeEntryDto> timeEntries = new();
+    private List<ProjectDto> projects = new();
+    private List<EmployeeDto> employees = new();
+
+    // 🔍 Filter Properties
+    private DateTime filterStartDate = DateTime.Today.AddDays(-30);
+    private DateTime filterEndDate = DateTime.Today;
+    private string selectedEmployeeId = "";
+    private string selectedProjectId = "";
+    private string selectedApprovalStatus = "";
+    private string selectedBillableFilter = "";
+
+    // 📄 Pagination Properties
+    private int currentPage = 1;
+    private int pageSize = 15;
+    private int totalPages => (int)Math.Ceiling((double)filteredTimeEntries.Count / pageSize);
+
+    // 🔄 State Properties
+    private bool isLoading = true;
+    private bool showTimeEntryModal = false;
+    private bool isSaving = false;
+
+    // ✏️ Editing Properties
+    private TimeEntryDto? editingTimeEntry;
+    private CreateTimeEntryRequest timeEntryRequest = new() { Date = DateTime.Today };
+
+    // 💡 Computed Properties
+    private List<TimeEntryDto> filteredTimeEntries
+    {
+        get
+        {
+            var filtered = timeEntries.AsEnumerable();
+
+            // 기간 필터
+            filtered = filtered.Where(t => t.Date >= filterStartDate && t.Date <= filterEndDate);
+
+            // 직원 필터
+            if (!string.IsNullOrEmpty(selectedEmployeeId) && Guid.TryParse(selectedEmployeeId, out var empId))
+            {
+                filtered = filtered.Where(t => t.EmployeeId == empId);
+            }
+
+            // 프로젝트 필터
+            if (!string.IsNullOrEmpty(selectedProjectId) && Guid.TryParse(selectedProjectId, out var projId))
+            {
+                filtered = filtered.Where(t => t.ProjectId == projId);
+            }
+
+            // 승인 상태 필터
+            if (!string.IsNullOrEmpty(selectedApprovalStatus))
+            {
+                filtered = selectedApprovalStatus switch
+                {
+                    "pending" => filtered.Where(t => !t.Approved),
+                    "approved" => filtered.Where(t => t.Approved),
+                    _ => filtered
+                };
+            }
+
+            // 빌러블 필터
+            if (!string.IsNullOrEmpty(selectedBillableFilter) && bool.TryParse(selectedBillableFilter, out var billable))
+            {
+                filtered = filtered.Where(t => t.Billable == billable);
+            }
+
+            return filtered.OrderByDescending(t => t.Date).ThenByDescending(t => t.CreatedAt).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 병렬로 데이터 로드
+            var tasks = new[]
+            {
+                LoadTimeEntries(),
+                LoadProjects(),
+                LoadEmployees()
+            };
+
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadTimeEntries()
+    {
+        var response = await TimeEntryService.GetTimeEntriesAsync(1, 1000);
+        if (response.Success && response.Data != null)
+        {
+            timeEntries = response.Data.Items;
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        var response = await ProjectService.GetProjectsAsync(1, 1000);
+        if (response.Success && response.Data != null)
+        {
+            projects = response.Data.Items;
+        }
+    }
+
+    private async Task LoadEmployees()
+    {
+        employees = await EmployeeService.GetActiveEmployeesAsync();
+    }
+
+    private List<TimeEntryDto> GetPagedTimeEntries()
+    {
+        return filteredTimeEntries
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private void ChangePage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        StateHasChanged();
+    }
+
+    private async Task ClearFilters()
+    {
+        filterStartDate = DateTime.Today.AddDays(-30);
+        filterEndDate = DateTime.Today;
+        selectedEmployeeId = "";
+        selectedProjectId = "";
+        selectedApprovalStatus = "";
+        selectedBillableFilter = "";
+        currentPage = 1;
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    // 📊 Statistics Methods
+    private decimal GetTotalHours()
+    {
+        return filteredTimeEntries.Sum(t => t.Hours);
+    }
+
+    private decimal GetBillableHours()
+    {
+        return filteredTimeEntries.Where(t => t.Billable).Sum(t => t.Hours);
+    }
+
+    private decimal GetBillablePercentage()
+    {
+        var total = GetTotalHours();
+        if (total == 0) return 0;
+        return (GetBillableHours() / total) * 100;
+    }
+
+    // ✏️ CRUD Methods
+    private void ShowAddTimeEntryModal()
+    {
+        editingTimeEntry = null;
+        timeEntryRequest = new CreateTimeEntryRequest { Date = DateTime.Today, Billable = true };
+        showTimeEntryModal = true;
+        StateHasChanged();
+    }
+
+    private void EditTimeEntry(TimeEntryDto timeEntry)
+    {
+        editingTimeEntry = timeEntry;
+        timeEntryRequest = new CreateTimeEntryRequest
+        {
+            Date = timeEntry.Date,
+            EmployeeId = timeEntry.EmployeeId,
+            ProjectId = timeEntry.ProjectId,
+            TaskDescription = timeEntry.TaskDescription,
+            Hours = timeEntry.Hours,
+            Billable = timeEntry.Billable
+        };
+        showTimeEntryModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseTimeEntryModal()
+    {
+        showTimeEntryModal = false;
+        editingTimeEntry = null;
+        timeEntryRequest = new() { Date = DateTime.Today };
+        StateHasChanged();
+    }
+
+    private async Task SaveTimeEntry()
+    {
+        if (isSaving) return;
+
+        isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            TimeEntryDto? result;
+
+            if (editingTimeEntry != null)
+            {
+                // UpdateTimeEntryRequest에는 EmployeeId가 없으므로 제외
+                var updateRequest = new UpdateTimeEntryRequest
+                {
+                    Date = timeEntryRequest.Date,
+                    ProjectId = timeEntryRequest.ProjectId,
+                    TaskDescription = timeEntryRequest.TaskDescription,
+                    Hours = timeEntryRequest.Hours,
+                    Billable = timeEntryRequest.Billable
+                };
+                result = await TimeEntryService.UpdateTimeEntryAsync(editingTimeEntry.Id, updateRequest);
+            }
+            else
+            {
+                result = await TimeEntryService.CreateTimeEntryAsync(timeEntryRequest);
+            }
+
+            if (result != null)
+            {
+                await LoadTimeEntries(); // 목록 새로고침
+                CloseTimeEntryModal();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "시간 기록 저장에 실패했습니다.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "시간 기록 저장 중 오류 발생");
+            await JSRuntime.InvokeVoidAsync("alert", "시간 기록 저장 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApproveTimeEntry(TimeEntryDto timeEntry)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"{timeEntry.EmployeeName}의 {timeEntry.Date:yyyy-MM-dd} 시간 기록을 승인하시겠습니까?");
+
+        if (confirmed)
+        {
+            // ApproveTimeEntryAsync 메서드가 없으므로 임시로 알림 처리
+            await JSRuntime.InvokeVoidAsync("alert", "승인 기능은 별도의 승인 관리 페이지에서 처리해주세요.");
+
+            // 실제 구현에서는 다음과 같은 코드가 필요합니다:
+            // var request = new ApproveTimeEntryRequest
+            // {
+            //     ApprovedBy = currentUserId, // 현재 로그인한 사용자 ID
+            //     TimeEntryIds = new List<Guid> { timeEntry.Id },
+            //     ApprovalNote = "개별 승인"
+            // };
+            //
+            // var success = await TimeEntryService.BulkApproveAsync(request);
+            // if (success)
+            // {
+            //     await LoadTimeEntries();
+            // }
+        }
+    }
+
+    private async Task ConfirmDelete(TimeEntryDto timeEntry)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"{timeEntry.Date:yyyy-MM-dd}의 시간 기록을 정말 삭제하시겠습니까?");
+
+        if (confirmed)
+        {
+            await DeleteTimeEntry(timeEntry.Id);
+        }
+    }
+
+    private async Task DeleteTimeEntry(Guid timeEntryId)
+    {
+        var success = await TimeEntryService.DeleteTimeEntryAsync(timeEntryId);
+        if (success)
+        {
+            await LoadTimeEntries(); // 목록 새로고침
+            StateHasChanged();
+        }
+    }
+
+    // 📊 Export Methods
+    private async Task ExportTimeEntries()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "엑셀 내보내기 기능은 준비 중입니다.");
+    }
+
+    // 🧭 Navigation Methods
+    private void NavigateToTimeSheet()
+    {
+        Navigation.NavigateTo("/time-tracking/timesheet");
+    }
+
+    private void NavigateToApproval()
+    {
+        Navigation.NavigateTo("/time-tracking/approval");
+    }
+
+    // 🛠️ Helper Methods
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 2)
+        {
+            return $"{words[0][0]}{words[1][0]}".ToUpper();
+        }
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private string TruncateText(string text, int length)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= length)
+            return text;
+        return text.Substring(0, length) + "...";
+    }
+
+    private string FormatHoursToTime(decimal hours)
+    {
+        var totalMinutes = (int)(hours * 60);
+        var h = totalMinutes / 60;
+        var m = totalMinutes % 60;
+        return $"{h:D2}:{m:D2}";
+    }
+}

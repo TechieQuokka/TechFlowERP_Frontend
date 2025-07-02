@@ -1,0 +1,613 @@
+﻿@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.Project
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@inject IProjectService ProjectService
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProjectFormModal> Logger
+
+<div class="modal fade" id="projectModal" tabindex="-1" aria-labelledby="projectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="projectModalLabel">
+                    <i class="fas fa-project-diagram me-2"></i>
+                    @(isEditMode ? "프로젝트 수정" : "새 프로젝트 추가")
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <EditForm Model="formModel" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="modal-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">처리 중...</span>
+                            </div>
+                            <p class="mt-2 text-muted">@(isEditMode ? "수정" : "저장") 중입니다...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- 기본 정보 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3">
+                                    <i class="fas fa-info-circle me-2"></i>기본 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="projectCode" class="form-label">
+                                        프로젝트 코드 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputText id="projectCode" class="form-control" @bind-Value="formModel.ProjectCode"
+                                               placeholder="예: PRJ2024001" />
+                                    <ValidationMessage For="() => formModel.ProjectCode" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">
+                                        프로젝트명 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputText id="name" class="form-control" @bind-Value="formModel.Name"
+                                               placeholder="예: 쇼핑몰 웹사이트 개발" />
+                                    <ValidationMessage For="() => formModel.Name" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">프로젝트 설명</label>
+                                    <InputTextArea id="description" class="form-control" rows="3" @bind-Value="formModel.Description"
+                                                   placeholder="프로젝트에 대한 상세 설명을 입력하세요..." />
+                                </div>
+                            </div>
+
+                            <!-- 고객 및 관리 정보 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-users me-2"></i>고객 및 관리 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="clientId" class="form-label">
+                                        고객사 <span class="text-danger">*</span>
+                                    </label>
+                                    <select id="clientId" class="form-select" value="@formModel.ClientId" @onchange="OnClientChanged">
+                                        <option value="">고객사 선택</option>
+                                        @foreach (var client in Clients)
+                                        {
+                                            <option value="@client.Id">@client.CompanyName</option>
+                                        }
+                                    </select>
+                                    <ValidationMessage For="() => formModel.ClientId" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="managerId" class="form-label">
+                                        프로젝트 매니저 <span class="text-danger">*</span>
+                                    </label>
+                                    <select id="managerId" class="form-select" value="@formModel.ManagerId" @onchange="OnManagerChanged">
+                                        <option value="">매니저 선택</option>
+                                        @foreach (var manager in Managers)
+                                        {
+                                            <option value="@manager.Id">@manager.Name (@manager.PositionTitle)</option>
+                                        }
+                                    </select>
+                                    <ValidationMessage For="() => formModel.ManagerId" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <!-- 프로젝트 설정 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-cog me-2"></i>프로젝트 설정
+                                </h6>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="projectType" class="form-label">프로젝트 유형</label>
+                                    <select id="projectType" class="form-select" value="@((int)formModel.ProjectType)" @onchange="OnProjectTypeChanged">
+                                        <option value="@((int)ProjectType.Fixed)">고정가</option>
+                                        <option value="@((int)ProjectType.TimeAndMaterial)">T&M</option>
+                                        <option value="@((int)ProjectType.Retainer)">유지보수</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="status" class="form-label">상태</label>
+                                    <select id="status" class="form-select" value="@((int)formModel.Status)" @onchange="OnStatusChanged">
+                                        <option value="@((int)ProjectStatus.Planning)">기획</option>
+                                        <option value="@((int)ProjectStatus.Active)">진행중</option>
+                                        <option value="@((int)ProjectStatus.OnHold)">보류</option>
+                                        <option value="@((int)ProjectStatus.Completed)">완료</option>
+                                        <option value="@((int)ProjectStatus.Cancelled)">취소</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="riskLevel" class="form-label">위험도</label>
+                                    <select id="riskLevel" class="form-select" value="@((int)formModel.RiskLevel)" @onchange="OnRiskLevelChanged">
+                                        <option value="@((int)RiskLevel.Low)">낮음</option>
+                                        <option value="@((int)RiskLevel.Medium)">보통</option>
+                                        <option value="@((int)RiskLevel.High)">높음</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="profitMargin" class="form-label">수익률 (%)</label>
+                                    <InputNumber id="profitMargin" class="form-control" @bind-Value="formModel.ProfitMargin"
+                                                 min="0" max="100" step="0.1" />
+                                    <ValidationMessage For="() => formModel.ProfitMargin" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <!-- 일정 및 예산 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-calendar-alt me-2"></i>일정 및 예산
+                                </h6>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="startDate" class="form-label">
+                                        시작일 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputDate id="startDate" class="form-control" @bind-Value="formModel.StartDate" />
+                                    <ValidationMessage For="() => formModel.StartDate" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="endDate" class="form-label">종료일 (예정)</label>
+                                    <InputDate id="endDate" class="form-control" @bind-Value="formModel.EndDate" />
+                                    @if (formModel.EndDate.HasValue && formModel.EndDate.Value <= formModel.StartDate)
+                                    {
+                                        <div class="text-warning small">종료일은 시작일보다 늦어야 합니다.</div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="budget" class="form-label">
+                                        예산 (만원) <span class="text-danger">*</span>
+                                    </label>
+                                    <InputNumber id="budget" class="form-control" @bind-Value="formModel.Budget"
+                                                 min="0" step="100" />
+                                    <ValidationMessage For="() => formModel.Budget" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <!-- 기술 스택 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-code me-2"></i>기술 스택
+                                </h6>
+
+                                <div class="mb-3">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" placeholder="기술명 입력 (예: React, C#, MySQL)"
+                                               @bind="newTechnology" @onkeypress="OnTechnologyKeyPress" />
+                                        <button type="button" class="btn btn-outline-primary" @onclick="AddTechnology">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                @if (formModel.Technologies.Any())
+                                {
+                                    <div class="technology-tags">
+                                        @for (int i = 0; i < formModel.Technologies.Count; i++)
+                                        {
+                                            var index = i; // 클로저 이슈 방지
+                                                           <span class="badge bg-secondary me-2 mb-2">
+                                                               @formModel.Technologies[index]
+                                                               <button type="button" class="btn-close btn-close-white ms-2"
+                                                                       @onclick="() => RemoveTechnology(index)"
+                                                                       aria-label="Remove"></button>
+                                                           </span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        프로젝트에서 사용할 기술을 추가해보세요.
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- 프로젝트 요약 -->
+                            @if (IsFormPartiallyFilled())
+                            {
+                                <div class="col-12">
+                                    <div class="card bg-light mt-3">
+                                        <div class="card-body">
+                                            <h6 class="card-title">프로젝트 요약</h6>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    @if (selectedClient != null)
+                                                    {
+                                                        <div><strong>고객사:</strong> @selectedClient.CompanyName</div>
+                                                        <div><small class="text-muted">업종: @selectedClient.Industry</small></div>
+                                                    }
+                                                    @if (formModel.Budget > 0)
+                                                    {
+                                                        <div class="mt-2"><strong>예산:</strong> @formModel.Budget.ToString("N0")만원</div>
+                                                        @if (formModel.ProfitMargin > 0)
+                                                        {
+                                                            <div><small class="text-muted">예상 수익: @((formModel.Budget * formModel.ProfitMargin / 100).ToString("N0"))만원</small></div>
+                                                        }
+                                                    }
+                                                </div>
+                                                <div class="col-md-6">
+                                                    @if (formModel.EndDate.HasValue)
+                                                    {
+                                                        var duration = (formModel.EndDate.Value - formModel.StartDate).Days;
+                                                        <div><strong>예상 기간:</strong> @@duration일</div>
+                                                        <div><small class="text-muted">@(duration / 30.0).ToString("F1")개월</small></div>
+                                                    }
+                                                    @if (formModel.Technologies.Any())
+                                                    {
+                                                        <div class="mt-2"><strong>주요 기술:</strong></div>
+                                                        <div>
+                                                            @foreach (var tech in formModel.Technologies.Take(3))
+                                                            {
+                                                                <span class="badge bg-info me-1">@tech</span>
+                                                            }
+                                                            @if (formModel.Technologies.Count > 3)
+                                                            {
+                                                                <span class="text-muted">외 @(formModel.Technologies.Count - 3)개</span>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled="@isLoading">
+                        취소
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@(isLoading || !IsFormValid())">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i>
+                        }
+                        @(isEditMode ? "수정" : "저장")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnProjectSaved { get; set; }
+    [Parameter] public List<ClientDto> Clients { get; set; } = new();
+    [Parameter] public List<EmployeeDto> Managers { get; set; } = new();
+
+    private bool isEditMode = false;
+    private bool isLoading = false;
+    private Guid? currentProjectId = null;
+
+    private ProjectFormModel formModel = new();
+    private ClientDto? selectedClient = null;
+    private string newTechnology = string.Empty;
+
+    public async Task OpenAsync(ProjectDto? project = null)
+    {
+        isEditMode = project != null;
+        currentProjectId = project?.Id;
+
+        if (isEditMode && project != null)
+        {
+            // 수정 모드: 기존 데이터 로드
+            formModel = new ProjectFormModel
+            {
+                ProjectCode = project.ProjectCode,
+                Name = project.Name,
+                Description = project.Description,
+                ClientId = project.ClientId,
+                ManagerId = project.ManagerId,
+                ProjectType = project.ProjectType,
+                Status = project.Status,
+                RiskLevel = project.RiskLevel,
+                StartDate = project.StartDate,
+                EndDate = project.EndDate,
+                Budget = project.Budget,
+                ProfitMargin = project.ProfitMargin,
+                Technologies = new List<string>(project.Technologies)
+            };
+        }
+        else
+        {
+            // 생성 모드: 빈 폼
+            formModel = new ProjectFormModel
+            {
+                StartDate = DateTime.Today,
+                ProjectType = ProjectType.TimeAndMaterial,
+                Status = ProjectStatus.Planning,
+                RiskLevel = RiskLevel.Medium,
+                ProfitMargin = 20
+            };
+        }
+
+        UpdateSelectedClient();
+        newTechnology = string.Empty;
+
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('projectModal')).show()");
+        StateHasChanged();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (!IsFormValid()) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (isEditMode && currentProjectId.HasValue)
+            {
+                // 수정
+                var updateRequest = new UpdateProjectRequest
+                {
+                    ProjectCode = formModel.ProjectCode,
+                    Name = formModel.Name,
+                    Description = formModel.Description,
+                    ClientId = formModel.ClientId,
+                    ManagerId = formModel.ManagerId,
+                    ProjectType = formModel.ProjectType,
+                    Status = formModel.Status,
+                    RiskLevel = formModel.RiskLevel,
+                    StartDate = formModel.StartDate,
+                    EndDate = formModel.EndDate,
+                    Budget = formModel.Budget,
+                    ProfitMargin = formModel.ProfitMargin,
+                    Technologies = formModel.Technologies
+                };
+
+                var result = await ProjectService.UpdateProjectAsync(currentProjectId.Value, updateRequest);
+
+                if (result != null)
+                {
+                    await OnProjectSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "프로젝트 수정에 실패했습니다.");
+                }
+            }
+            else
+            {
+                // 생성
+                var createRequest = new CreateProjectRequest
+                {
+                    ProjectCode = formModel.ProjectCode,
+                    Name = formModel.Name,
+                    Description = formModel.Description,
+                    ClientId = formModel.ClientId,
+                    ManagerId = formModel.ManagerId,
+                    ProjectType = formModel.ProjectType,
+                    Status = formModel.Status,
+                    RiskLevel = formModel.RiskLevel,
+                    StartDate = formModel.StartDate,
+                    EndDate = formModel.EndDate,
+                    Budget = formModel.Budget,
+                    ProfitMargin = formModel.ProfitMargin,
+                    Technologies = formModel.Technologies
+                };
+
+                var result = await ProjectService.CreateProjectAsync(createRequest);
+
+                if (result != null)
+                {
+                    await OnProjectSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "프로젝트 생성에 실패했습니다.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 {Action} 중 오류 발생", isEditMode ? "수정" : "생성");
+            await JSRuntime.InvokeVoidAsync("alert", $"프로젝트 {(isEditMode ? "수정" : "생성")} 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide()");
+    }
+
+    private void OnClientChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var clientId))
+        {
+            formModel.ClientId = clientId;
+        }
+        else
+        {
+            formModel.ClientId = Guid.Empty;
+        }
+        UpdateSelectedClient();
+    }
+
+    private void OnManagerChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var managerId))
+        {
+            formModel.ManagerId = managerId;
+        }
+        else
+        {
+            formModel.ManagerId = Guid.Empty;
+        }
+    }
+
+    private void OnProjectTypeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var typeValue))
+        {
+            formModel.ProjectType = (ProjectType)typeValue;
+        }
+    }
+
+    private void OnStatusChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var statusValue))
+        {
+            formModel.Status = (ProjectStatus)statusValue;
+        }
+    }
+
+    private void OnRiskLevelChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var riskValue))
+        {
+            formModel.RiskLevel = (RiskLevel)riskValue;
+        }
+    }
+
+    private void UpdateSelectedClient()
+    {
+        selectedClient = formModel.ClientId != Guid.Empty
+            ? Clients.FirstOrDefault(c => c.Id == formModel.ClientId)
+            : null;
+    }
+
+    private async Task OnTechnologyKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddTechnology();
+        }
+    }
+
+    private async Task AddTechnology()
+    {
+        if (!string.IsNullOrWhiteSpace(newTechnology) &&
+            !formModel.Technologies.Contains(newTechnology.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            formModel.Technologies.Add(newTechnology.Trim());
+            newTechnology = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private void RemoveTechnology(int index)
+    {
+        if (index >= 0 && index < formModel.Technologies.Count)
+        {
+            formModel.Technologies.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(formModel.ProjectCode) &&
+               !string.IsNullOrWhiteSpace(formModel.Name) &&
+               formModel.ClientId != Guid.Empty &&
+               formModel.ManagerId != Guid.Empty &&
+               formModel.StartDate != default &&
+               formModel.Budget >= 0 &&
+               (formModel.EndDate == null || formModel.EndDate > formModel.StartDate);
+    }
+
+    private bool IsFormPartiallyFilled()
+    {
+        return !string.IsNullOrWhiteSpace(formModel.Name) ||
+               formModel.ClientId != Guid.Empty ||
+               formModel.Budget > 0 ||
+               formModel.Technologies.Any();
+    }
+
+    // 폼 모델 클래스
+    private class ProjectFormModel
+    {
+        public string ProjectCode { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public Guid ClientId { get; set; } = Guid.Empty;
+        public Guid ManagerId { get; set; } = Guid.Empty;
+        public ProjectType ProjectType { get; set; } = ProjectType.TimeAndMaterial;
+        public ProjectStatus Status { get; set; } = ProjectStatus.Planning;
+        public RiskLevel RiskLevel { get; set; } = RiskLevel.Medium;
+        public DateTime StartDate { get; set; } = DateTime.Today;
+        public DateTime? EndDate { get; set; }
+        public decimal Budget { get; set; } = 0;
+        public decimal ProfitMargin { get; set; } = 20;
+        public List<string> Technologies { get; set; } = new();
+    }
+}
+
+<style>
+    .technology-tags {
+        max-height: 120px;
+        overflow-y: auto;
+    }
+
+    .btn-close-white {
+        filter: invert(1) grayscale(100%) brightness(200%);
+        font-size: 0.75rem;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .badge {
+        font-size: 0.875rem;
+    }
+
+    .input-group .btn {
+        border-left: 0;
+    }
+</style>

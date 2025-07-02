@@ -1,0 +1,196 @@
+﻿@using Radzen
+@using Radzen.Blazor
+@using TechFlowERP.Shared.Models.Charts
+@using TechFlowERP.Shared.Components.Charts.Base
+@inherits TechFlowERP.Shared.Components.BaseComponent
+
+<BaseChart Title="@Title" 
+           Height="@Height" 
+           Width="@Width"
+           IsLoading="@LoadingState.IsLoading"
+           HasError="@LoadingState.HasError"
+           HasNoData="@LoadingState.HasNoData"
+           ErrorMessage="@LoadingState.ErrorMessage"
+           OnRetry="@OnRetryAsync"
+           ShowFooter="true"
+           FooterText="@GetFooterText()">
+    
+    <RadzenChart style="@ChartStyle">
+        <RadzenColumnSeries Data="@ChartData" 
+                            CategoryProperty="EmployeeName" 
+                            ValueProperty="BillableHours"
+                            Title="@BillableSeriesTitle"
+                            Fill="@BillableColor" />
+        
+        <RadzenColumnSeries Data="@ChartData" 
+                            CategoryProperty="EmployeeName" 
+                            ValueProperty="NonBillableHours"
+                            Title="@NonBillableSeriesTitle"
+                            Fill="@NonBillableColor" />
+        
+        <RadzenCategoryAxis Padding="20" />
+        <RadzenValueAxis Formatter="@FormatHours">
+            <RadzenGridLines Visible="true" />
+            <RadzenAxisTitle Text="@YAxisTitle" />
+        </RadzenValueAxis>
+        
+        <RadzenLegend Position="LegendPosition.Top" />
+        <RadzenColumnOptions Margin="10" />
+    </RadzenChart>
+    
+</BaseChart>
+
+@code {
+    [Parameter] public string Title { get; set; } = "직원 활용도";
+    [Parameter] public string BillableSeriesTitle { get; set; } = "빌러블 시간";
+    [Parameter] public string NonBillableSeriesTitle { get; set; } = "논빌러블 시간";
+    [Parameter] public string YAxisTitle { get; set; } = "시간 (h)";
+    [Parameter] public int Height { get; set; } = ChartOptions.UtilizationBar.Height;
+    [Parameter] public int Width { get; set; } = ChartOptions.UtilizationBar.Width;
+    [Parameter] public string BillableColor { get; set; } = ChartOptions.UtilizationBar.Colors[0];
+    [Parameter] public string NonBillableColor { get; set; } = ChartOptions.UtilizationBar.Colors[1];
+    [Parameter] public List<UtilizationChartData> Data { get; set; } = new();
+    [Parameter] public EventCallback OnDataRequested { get; set; }
+    [Parameter] public int MaxEmployees { get; set; } = 10; // 표시할 최대 직원 수
+
+    private ChartLoadingState LoadingState { get; set; } = new();
+    private List<UtilizationChartData> ChartData { get; set; } = new();
+    private string ChartStyle => $"width: 100%; height: {Height - 50}px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Data.Any())
+        {
+            ChartData = PrepareChartData(Data);
+            LoadingState.HasNoData = false;
+        }
+        else
+        {
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            LoadingState.IsLoading = true;
+            LoadingState.HasError = false;
+            LoadingState.HasNoData = false;
+
+            if (OnDataRequested.HasDelegate)
+            {
+                await OnDataRequested.InvokeAsync();
+            }
+            else if (!Data.Any())
+            {
+                // 샘플 데이터 (실제로는 API에서 가져옴)
+                var sampleData = GetSampleData();
+                ChartData = PrepareChartData(sampleData);
+            }
+            else
+            {
+                ChartData = PrepareChartData(Data);
+            }
+
+            LoadingState.HasNoData = !ChartData.Any();
+            LoadingState.LastLoadTime = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            LoadingState.HasError = true;
+            LoadingState.ErrorMessage = $"데이터 로딩 실패: {ex.Message}";
+        }
+        finally
+        {
+            LoadingState.IsLoading = false;
+        }
+    }
+
+    private List<UtilizationChartData> PrepareChartData(List<UtilizationChartData> rawData)
+    {
+        // 활용도 높은 순으로 정렬하고 최대 표시 수만큼 제한
+        return rawData
+            .OrderByDescending(d => d.UtilizationRate)
+            .Take(MaxEmployees)
+            .ToList();
+    }
+
+    private async Task OnRetryAsync()
+    {
+        LoadingState.RetryCount++;
+        await LoadDataAsync();
+    }
+
+    private string FormatHours(object value)
+    {
+        if (value is double doubleValue)
+        {
+            return $"{doubleValue:F1}h";
+        }
+        return value?.ToString() ?? "";
+    }
+
+    private string GetFooterText()
+    {
+        if (!ChartData.Any()) return "";
+        
+        var avgUtilization = ChartData.Average(d => d.UtilizationRate);
+        var totalBillable = ChartData.Sum(d => d.BillableHours);
+        var totalHours = ChartData.Sum(d => d.TotalHours);
+        
+        return $"평균 활용도: {avgUtilization:F1}% | 총 빌러블: {totalBillable:F1}h | 업데이트: {LoadingState.LastLoadTime:HH:mm}";
+    }
+
+    private List<UtilizationChartData> GetSampleData()
+    {
+        var employees = new[]
+        {
+            "김개발", "이프론트", "박백엔드", "최디자인", "정기획",
+            "강테스트", "윤데브옵스", "임풀스택", "한시니어", "조주니어"
+        };
+
+        var departments = new[] { "개발팀", "디자인팀", "기획팀", "QA팀" };
+        var random = new Random();
+        var data = new List<UtilizationChartData>();
+
+        foreach (var employee in employees)
+        {
+            var billableHours = 120 + random.NextDouble() * 60; // 120-180h
+            var nonBillableHours = 20 + random.NextDouble() * 40; // 20-60h
+            var totalHours = billableHours + nonBillableHours;
+            var utilizationRate = (billableHours / totalHours) * 100;
+
+            data.Add(new UtilizationChartData
+            {
+                EmployeeName = employee,
+                EmployeeId = Guid.NewGuid().ToString(),
+                BillableHours = Math.Round(billableHours, 1),
+                NonBillableHours = Math.Round(nonBillableHours, 1),
+                TotalHours = Math.Round(totalHours, 1),
+                UtilizationRate = Math.Round(utilizationRate, 1),
+                Department = departments[random.Next(departments.Length)]
+            });
+        }
+
+        return data;
+    }
+
+    // 외부에서 데이터 갱신할 때 사용
+    public async Task RefreshAsync()
+    {
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    // 직원 바 클릭 이벤트 (나중에 추가 가능)
+    [Parameter] public EventCallback<UtilizationChartData> OnEmployeeClicked { get; set; }
+
+    // 부서별 필터링 (나중에 추가 가능)
+    [Parameter] public string SelectedDepartment { get; set; } = "";
+}

@@ -1,0 +1,156 @@
+@using MudBlazor
+
+<div class="form-field @GetFieldClass()">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <MudText Typo="Typo.body2"
+                 Color="@GetLabelColor()"
+                 Class="field-label mb-2">
+            @Label
+            @if (Required)
+            {
+                <span class="required-indicator">*</span>
+            }
+            @if (!string.IsNullOrEmpty(Tooltip))
+            {
+                <MudTooltip Text="@Tooltip" Placement="Placement.Top">
+                    <MudIcon Icon="Icons.Material.Filled.HelpOutline"
+                             Size="Size.Small"
+                             Color="Color.Secondary"
+                             Class="ml-1" />
+                </MudTooltip>
+            }
+        </MudText>
+    }
+
+    <div class="field-content">
+        @ChildContent
+    </div>
+
+    @if (!string.IsNullOrEmpty(ErrorText))
+    {
+        <MudText Typo="Typo.caption"
+                 Color="Color.Error"
+                 Class="field-error mt-1">
+            <MudIcon Icon="Icons.Material.Filled.Error"
+                     Size="Size.Small"
+                     Class="mr-1" />
+            @ErrorText
+        </MudText>
+    }
+
+    @if (!string.IsNullOrEmpty(HelperText) && string.IsNullOrEmpty(ErrorText))
+    {
+        <MudText Typo="Typo.caption"
+                 Color="Color.Secondary"
+                 Class="field-helper mt-1">
+            @HelperText
+        </MudText>
+    }
+</div>
+
+<style>
+    .form-field {
+        margin-bottom: 1rem;
+    }
+
+        .form-field.full-width {
+            width: 100%;
+        }
+
+        .form-field.disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+    .field-label {
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+    }
+
+    .required-indicator {
+        color: #f44336;
+        margin-left: 2px;
+    }
+
+    .field-error {
+        display: flex;
+        align-items: center;
+    }
+
+    .field-content {
+        position: relative;
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// 필드 라벨
+    /// </summary>
+    [Parameter] public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 필수 입력 여부
+    /// </summary>
+    [Parameter] public bool Required { get; set; } = false;
+
+    /// <summary>
+    /// 도움말 텍스트
+    /// </summary>
+    [Parameter] public string HelperText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 오류 텍스트
+    /// </summary>
+    [Parameter] public string ErrorText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 툴팁 텍스트
+    /// </summary>
+    [Parameter] public string Tooltip { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 전체 너비 사용 여부
+    /// </summary>
+    [Parameter] public bool FullWidth { get; set; } = true;
+
+    /// <summary>
+    /// 비활성화 여부
+    /// </summary>
+    [Parameter] public bool Disabled { get; set; } = false;
+
+    /// <summary>
+    /// 추가 CSS 클래스
+    /// </summary>
+    [Parameter] public string Class { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 자식 콘텐츠
+    /// </summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string GetFieldClass()
+    {
+        var classes = new List<string>();
+
+        if (FullWidth)
+            classes.Add("full-width");
+
+        if (Disabled)
+            classes.Add("disabled");
+
+        if (!string.IsNullOrEmpty(Class))
+            classes.Add(Class);
+
+        return string.Join(" ", classes);
+    }
+
+    private Color GetLabelColor()
+    {
+        if (!string.IsNullOrEmpty(ErrorText))
+            return Color.Error;
+
+        return Color.Default;
+    }
+}

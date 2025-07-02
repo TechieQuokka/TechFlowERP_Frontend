@@ -1,0 +1,161 @@
+﻿@using MudBlazor
+@using TechFlowERP.Models.DTOs.Auth
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazored.Toast.Services
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@implements IDisposable
+
+<div class="top-navigation">
+    @* 🔔 간단한 알림 아이콘 *@
+    <MudBadge Content="@_notificationCount"
+              Color="Color.Error"
+              Visible="@(_notificationCount > 0)"
+              Overlap="true">
+        <MudIconButton Icon="Icons.Material.Filled.Notifications"
+                       Color="Color.Inherit"
+                       OnClick="@(() => Navigation.NavigateTo("/notifications"))" />
+    </MudBadge>
+
+    @* 👤 사용자 영역 *@
+    <AuthorizeView>
+        <Authorized>
+            <div class="user-section">
+                @* 사용자 정보 표시 *@
+                <div class="user-info">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small">
+                        @GetUserInitials()
+                    </MudAvatar>
+                    <MudText Typo="Typo.body2" Class="ml-2">
+                        @_userName
+                    </MudText>
+                </div>
+
+                @* 간단한 메뉴 *@
+                <MudMenu Icon="Icons.Material.Filled.MoreVert"
+                         Color="Color.Inherit"
+                         Size="Size.Small">
+                    <MudMenuItem Icon="Icons.Material.Filled.Person"
+                                 OnClick="@(() => Navigation.NavigateTo("/profile"))">
+                        내 프로필
+                    </MudMenuItem>
+                    <MudMenuItem Icon="Icons.Material.Filled.Settings"
+                                 OnClick="@(() => Navigation.NavigateTo("/settings"))">
+                        설정
+                    </MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="Icons.Material.Filled.Logout"
+                                 IconColor="Color.Error"
+                                 OnClick="@HandleLogout">
+                        <MudText Color="Color.Error">로그아웃</MudText>
+                    </MudMenuItem>
+                </MudMenu>
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       Href="/login">
+                로그인
+            </MudButton>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+<style>
+    .top-navigation {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 8px;
+    }
+
+    .user-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+    }
+</style>
+
+@code {
+    private string? _userName;
+    private int _notificationCount = 3; // 임시 고정값
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 현재 사용자 정보 로드
+        await LoadCurrentUser();
+
+        // 인증 상태 변경 감지
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    /// <summary>
+    /// 현재 사용자 정보 로드
+    /// </summary>
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            _userName = authState.User?.Identity?.Name ?? "사용자";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"사용자 정보 로드 오류: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 인증 상태 변경 이벤트 핸들러
+    /// </summary>
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        await LoadCurrentUser();
+    }
+
+    /// <summary>
+    /// 사용자 이니셜 가져오기
+    /// </summary>
+    private string GetUserInitials()
+    {
+        if (string.IsNullOrEmpty(_userName) || _userName == "사용자") return "U";
+
+        var parts = _userName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        }
+        return _userName.Length > 0 ? _userName[0].ToString().ToUpper() : "U";
+    }
+
+    /// <summary>
+    /// 로그아웃 처리
+    /// </summary>
+    private async Task HandleLogout()
+    {
+        try
+        {
+            // 로그아웃 페이지로 이동 (서버에서 처리)
+            Navigation.NavigateTo("/logout", true);
+            ToastService.ShowSuccess("로그아웃되었습니다.");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("로그아웃 중 오류가 발생했습니다.");
+            Console.WriteLine($"로그아웃 오류: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+}

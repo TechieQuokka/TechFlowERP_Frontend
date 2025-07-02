@@ -1,0 +1,297 @@
+﻿@using MudBlazor
+
+<div class="date-range-picker">
+    <MudGrid AlignItems="Center" Spacing="2">
+        <MudItem xs="12" sm="5">
+            <MudDatePicker @bind-Date="@_startDate"
+                           Label="@StartDateLabel"
+                           Variant="@Variant"
+                           Color="@Color"
+                           DateFormat="@DateFormat"
+                           MaxDate="@_endDate"
+                           MinDate="@MinDate"
+                           Disabled="@Disabled"
+                           Required="@Required"
+                           ErrorText="@StartDateErrorText"
+                           Class="@StartDateClass" />
+        </MudItem>
+
+        <MudItem xs="12" sm="2" Class="d-flex justify-center">
+            <MudIcon Icon="Icons.Material.Filled.ArrowForward"
+                     Color="Color.Secondary"
+                     Class="date-separator" />
+        </MudItem>
+
+        <MudItem xs="12" sm="5">
+            <MudDatePicker @bind-Date="@_endDate"
+                           Label="@EndDateLabel"
+                           Variant="@Variant"
+                           Color="@Color"
+                           DateFormat="@DateFormat"
+                           MinDate="@_startDate"
+                           MaxDate="@MaxDate"
+                           Disabled="@Disabled"
+                           Required="@Required"
+                           ErrorText="@EndDateErrorText"
+                           Class="@EndDateClass" />
+        </MudItem>
+    </MudGrid>
+
+    @* 빠른 선택 버튼들 *@
+    @if (ShowQuickSelections)
+    {
+        <div class="quick-selections mt-3">
+            <MudButtonGroup Size="Size.Small"
+                            Variant="Variant.Outlined"
+                            Color="Color.Primary">
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.Today))">
+                    오늘
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.Yesterday))">
+                    어제
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.ThisWeek))">
+                    이번 주
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.LastWeek))">
+                    지난 주
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.ThisMonth))">
+                    이번 달
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.LastMonth))">
+                    지난 달
+                </MudButton>
+                <MudButton OnClick="@(() => SetDateRange(DateRangeType.ThisYear))">
+                    올해
+                </MudButton>
+            </MudButtonGroup>
+        </div>
+    }
+</div>
+
+<style>
+    .date-separator {
+        margin-top: 1rem;
+    }
+
+    .quick-selections {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    @@media (max-width: 600px) {
+        .quick-selections .mud-button-group
+
+    {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .quick-selections .mud-button {
+        width: 100%;
+    }
+
+    }
+</style>
+
+@code {
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+
+    /// <summary>
+    /// 시작 날짜
+    /// </summary>
+    [Parameter]
+    public DateTime? StartDate
+    {
+        get => _startDate;
+        set
+        {
+            if (_startDate != value)
+            {
+                _startDate = value;
+                StartDateChanged.InvokeAsync(value);
+                OnDateRangeChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 종료 날짜
+    /// </summary>
+    [Parameter]
+    public DateTime? EndDate
+    {
+        get => _endDate;
+        set
+        {
+            if (_endDate != value)
+            {
+                _endDate = value;
+                EndDateChanged.InvokeAsync(value);
+                OnDateRangeChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 시작 날짜 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<DateTime?> StartDateChanged { get; set; }
+
+    /// <summary>
+    /// 종료 날짜 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<DateTime?> EndDateChanged { get; set; }
+
+    /// <summary>
+    /// 날짜 범위 변경 이벤트
+    /// </summary>
+    [Parameter] public EventCallback<TechFlowERP.Models.DTOs.DateRange> OnDateRangeChange { get; set; }
+
+    /// <summary>
+    /// 시작 날짜 라벨
+    /// </summary>
+    [Parameter] public string StartDateLabel { get; set; } = "시작일";
+
+    /// <summary>
+    /// 종료 날짜 라벨
+    /// </summary>
+    [Parameter] public string EndDateLabel { get; set; } = "종료일";
+
+    /// <summary>
+    /// 날짜 형식
+    /// </summary>
+    [Parameter] public string DateFormat { get; set; } = "yyyy-MM-dd";
+
+    /// <summary>
+    /// 최소 날짜
+    /// </summary>
+    [Parameter] public DateTime? MinDate { get; set; }
+
+    /// <summary>
+    /// 최대 날짜
+    /// </summary>
+    [Parameter] public DateTime? MaxDate { get; set; }
+
+    /// <summary>
+    /// 빠른 선택 버튼 표시 여부
+    /// </summary>
+    [Parameter] public bool ShowQuickSelections { get; set; } = true;
+
+    /// <summary>
+    /// 비활성화 여부
+    /// </summary>
+    [Parameter] public bool Disabled { get; set; } = false;
+
+    /// <summary>
+    /// 필수 입력 여부
+    /// </summary>
+    [Parameter] public bool Required { get; set; } = false;
+
+    /// <summary>
+    /// 컴포넌트 변형
+    /// </summary>
+    [Parameter] public Variant Variant { get; set; } = Variant.Outlined;
+
+    /// <summary>
+    /// 색상
+    /// </summary>
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+
+    /// <summary>
+    /// 시작일 오류 텍스트
+    /// </summary>
+    [Parameter] public string StartDateErrorText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 종료일 오류 텍스트
+    /// </summary>
+    [Parameter] public string EndDateErrorText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 시작일 CSS 클래스
+    /// </summary>
+    [Parameter] public string StartDateClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 종료일 CSS 클래스
+    /// </summary>
+    [Parameter] public string EndDateClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 날짜 범위 변경 알림
+    /// </summary>
+    private async Task OnDateRangeChanged()
+    {
+        var dateRange = new TechFlowERP.Models.DTOs.DateRange(_startDate, _endDate);
+        await OnDateRangeChange.InvokeAsync(dateRange);
+    }
+
+    /// <summary>
+    /// 빠른 날짜 범위 설정
+    /// </summary>
+    private async Task SetDateRange(DateRangeType type)
+    {
+        var (start, end) = GetDateRange(type);
+
+        _startDate = start;
+        _endDate = end;
+
+        await StartDateChanged.InvokeAsync(_startDate);
+        await EndDateChanged.InvokeAsync(_endDate);
+        await OnDateRangeChanged();
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 날짜 범위 타입에 따른 시작일/종료일 계산
+    /// </summary>
+    private static (DateTime start, DateTime end) GetDateRange(DateRangeType type)
+    {
+        var today = DateTime.Today;
+
+        return type switch
+        {
+            DateRangeType.Today => (today, today),
+            DateRangeType.Yesterday => (today.AddDays(-1), today.AddDays(-1)),
+            DateRangeType.ThisWeek => (GetStartOfWeek(today), GetEndOfWeek(today)),
+            DateRangeType.LastWeek => (GetStartOfWeek(today.AddDays(-7)), GetEndOfWeek(today.AddDays(-7))),
+            DateRangeType.ThisMonth => (new DateTime(today.Year, today.Month, 1), new DateTime(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month))),
+            DateRangeType.LastMonth => GetLastMonthRange(today),
+            DateRangeType.ThisYear => (new DateTime(today.Year, 1, 1), new DateTime(today.Year, 12, 31)),
+            _ => (today, today)
+        };
+    }
+
+    /// <summary>
+    /// 주의 시작일 계산 (월요일 기준)
+    /// </summary>
+    private static DateTime GetStartOfWeek(DateTime date)
+    {
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return date.AddDays(-1 * diff).Date;
+    }
+
+    /// <summary>
+    /// 주의 종료일 계산 (일요일 기준)
+    /// </summary>
+    private static DateTime GetEndOfWeek(DateTime date)
+    {
+        return GetStartOfWeek(date).AddDays(6);
+    }
+
+    /// <summary>
+    /// 지난 달 범위 계산
+    /// </summary>
+    private static (DateTime start, DateTime end) GetLastMonthRange(DateTime today)
+    {
+        var firstDayLastMonth = today.AddMonths(-1);
+        var start = new DateTime(firstDayLastMonth.Year, firstDayLastMonth.Month, 1);
+        var end = new DateTime(firstDayLastMonth.Year, firstDayLastMonth.Month, DateTime.DaysInMonth(firstDayLastMonth.Year, firstDayLastMonth.Month));
+        return (start, end);
+    }
+}

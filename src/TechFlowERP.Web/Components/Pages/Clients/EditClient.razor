@@ -1,0 +1,549 @@
+﻿@page "/clients/edit/{ClientId}"
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Models.Requests.Client
+@using TechFlowERP.Shared.Components
+@using MudBlazor
+@using System.ComponentModel.DataAnnotations
+@inherits TechFlowERP.Shared.Components.BaseComponent
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>@(Client?.CompanyName ?? "클라이언트") 수정 - TechFlow ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large">
+    <BaseComponent IsLoading="@IsLoading"
+                   HasError="@HasError"
+                   ErrorMessage="@ErrorMessage"
+                   OnRetry="@LoadClientAsync">
+
+        @if (Client != null)
+        {
+            <!-- 페이지 헤더 -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <MudBreadcrumbs Items="@BreadcrumbItems" Class="mb-2" />
+                    <h3 class="mb-1">✏️ @Client.CompanyName 수정</h3>
+                    <p class="text-muted mb-0">클라이언트 정보를 수정합니다</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Outlined"
+                               StartIcon="Icons.Material.Filled.Visibility"
+                               OnClick="@ViewClient">
+                        상세보기
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               StartIcon="Icons.Material.Filled.ArrowBack"
+                               OnClick="@GoBack">
+                        취소
+                    </MudButton>
+                </div>
+            </div>
+
+            <MudForm @ref="form" @bind-IsValid="@isFormValid">
+                <MudGrid>
+                    <!-- 기본 정보 섹션 -->
+                    <MudItem xs="12" md="8">
+                        <MudPaper Class="pa-6">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <MudText Typo="Typo.h6">
+                                    <MudIcon Icon="Icons.Material.Filled.Business" Class="me-2" />
+                                    기본 정보
+                                </MudText>
+                                @if (HasChanges)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">
+                                        <MudIcon Icon="Icons.Material.Filled.Edit" Size="Size.Small" Class="me-1" />
+                                        수정됨
+                                    </MudChip>
+                                }
+                            </div>
+
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudTextField @bind-Value="@Model.CompanyName"
+                                                  Label="회사명"
+                                                  Required="true"
+                                                  RequiredError="회사명은 필수입니다"
+                                                  MaxLength="200"
+                                                  Counter="200"
+                                                  Immediate="true"
+                                                  Validation="@(new Func<string, IEnumerable<string>>(ValidateCompanyName))"
+                                                  @onchange="@OnFieldChanged" />
+                                </MudItem>
+
+                                <MudItem xs="12" md="6">
+                                    <MudSelect @bind-Value="@Model.Industry"
+                                               Label="업종"
+                                               Required="true"
+                                               RequiredError="업종을 선택해주세요"
+                                               @onchange="@OnFieldChanged">
+                                        @foreach (var industry in Industries)
+                                        {
+                                            <MudSelectItem Value="@industry">@industry</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+
+                                <MudItem xs="12" md="6">
+                                    <MudSelect @bind-Value="@Model.SizeCategory"
+                                               Label="회사 규모"
+                                               Required="true"
+                                               RequiredError="회사 규모를 선택해주세요"
+                                               @onchange="@OnFieldChanged">
+                                        <MudSelectItem Value="@CompanySizeCategory.Small">
+                                            소규모 (직원 50명 미만)
+                                        </MudSelectItem>
+                                        <MudSelectItem Value="@CompanySizeCategory.Medium">
+                                            중간규모 (직원 50-500명)
+                                        </MudSelectItem>
+                                        <MudSelectItem Value="@CompanySizeCategory.Large">
+                                            대규모 (직원 500명 이상)
+                                        </MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+
+                                <MudItem xs="12" md="6">
+                                    <MudNumericField @bind-Value="@Model.ContractValue"
+                                                     Label="계약 금액 (USD)"
+                                                     Min="0"
+                                                     Max="9999999999"
+                                                     Format="N0"
+                                                     HideSpinButtons="false"
+                                                     Adornment="Adornment.Start"
+                                                     AdornmentText="$"
+                                                     @onchange="@OnFieldChanged" />
+                                </MudItem>
+
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="@Model.Address"
+                                                  Label="주소"
+                                                  Lines="2"
+                                                  MaxLength="500"
+                                                  Counter="500"
+                                                  @onchange="@OnFieldChanged" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    </MudItem>
+
+                    <!-- 담당자 정보 섹션 -->
+                    <MudItem xs="12" md="4">
+                        <MudPaper Class="pa-6">
+                            <MudText Typo="Typo.h6" Class="mb-4">
+                                <MudIcon Icon="Icons.Material.Filled.Person" Class="me-2" />
+                                담당자 정보
+                            </MudText>
+
+                            <MudStack Spacing="3">
+                                <MudTextField @bind-Value="@Model.ContactPerson"
+                                              Label="담당자명"
+                                              Required="true"
+                                              RequiredError="담당자명은 필수입니다"
+                                              MaxLength="100"
+                                              @onchange="@OnFieldChanged" />
+
+                                <MudTextField @bind-Value="@Model.ContactEmail"
+                                              Label="이메일"
+                                              InputType="InputType.Email"
+                                              Required="true"
+                                              RequiredError="이메일은 필수입니다"
+                                              Validation="@(new EmailAddressAttribute())"
+                                              MaxLength="100"
+                                              @onchange="@OnFieldChanged" />
+
+                                <MudTextField @bind-Value="@Model.ContactPhone"
+                                              Label="연락처"
+                                              Mask="@phoneMask"
+                                              MaxLength="50"
+                                              Placeholder="02-1234-5678"
+                                              @onchange="@OnFieldChanged" />
+                            </MudStack>
+
+                            <!-- 변경 사항 미리보기 -->
+                            @if (HasChanges)
+                            {
+                                <MudDivider Class="my-4" />
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">변경사항 미리보기</MudText>
+                                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                                    @(ChangedFieldsCount)개 필드가 수정되었습니다
+                                </MudAlert>
+
+                                <!-- 변경된 필드들 표시 -->
+                                @foreach (var change in GetChangedFields())
+                                {
+                                    <div class="mb-2">
+                                        <MudText Typo="Typo.caption" Class="text-muted">@change.FieldName</MudText>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <MudText Typo="Typo.body2" Class="text-decoration-line-through text-muted">
+                                                @change.OldValue
+                                            </MudText>
+                                            <MudIcon Icon="Icons.Material.Filled.ArrowForward" Size="Size.Small" />
+                                            <MudText Typo="Typo.body2" Class="fw-bold text-success">
+                                                @change.NewValue
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            <!-- 수정 이력 -->
+                            <MudDivider Class="my-4" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">수정 이력</MudText>
+                            <MudText Typo="Typo.body2" Class="text-muted">
+                                최초 등록: @Client.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                            <MudText Typo="Typo.body2" Class="text-muted">
+                                최근 수정: @Client.UpdatedAt.ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+
+                    <!-- 액션 버튼 -->
+                    <MudItem xs="12">
+                        <MudPaper Class="pa-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center gap-3">
+                                    @if (HasChanges)
+                                    {
+                                        <MudIcon Icon="Icons.Material.Filled.Info" Color="Color.Warning" />
+                                        <MudText Class="text-warning">
+                                            @(ChangedFieldsCount)개 필드가 수정되었습니다. 변경사항을 저장하시겠습니까?
+                                        </MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudIcon Icon="Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                        <MudText Class="text-success">
+                                            변경사항이 없습니다
+                                        </MudText>
+                                    }
+                                </div>
+
+                                <div class="d-flex gap-2">
+                                    @if (HasChanges)
+                                    {
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Secondary"
+                                                   StartIcon="Icons.Material.Filled.Undo"
+                                                   OnClick="@ResetChanges">
+                                            변경사항 취소
+                                        </MudButton>
+                                    }
+
+                                    <MudButton Variant="Variant.Outlined"
+                                               OnClick="@GoBack"
+                                               StartIcon="Icons.Material.Filled.Cancel">
+                                        닫기
+                                    </MudButton>
+
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               StartIcon="Icons.Material.Filled.Save"
+                                               OnClick="@SaveClientAsync"
+                                               Disabled="@(!isFormValid || !HasChanges || IsLoading)">
+                                        @if (IsLoading)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            <span class="ms-2">저장 중...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>변경사항 저장</span>
+                                        }
+                                    </MudButton>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+
+    </BaseComponent>
+</MudContainer>
+
+@code {
+    [Parameter] public string ClientId { get; set; } = string.Empty;
+
+    private MudForm form = null!;
+    private bool isFormValid = false;
+
+    // 전화번호 마스크
+    private readonly IMask phoneMask = new PatternMask("000-0000-0000")
+    {
+        MaskChars = new[] { new MaskChar('0', @"[0-9]") },
+        Placeholder = '_',
+        CleanDelimiters = true
+    };
+
+    // 데이터
+    private ClientDto? Client;
+    private UpdateClientRequest Model = new();
+    private UpdateClientRequest OriginalModel = new();
+
+    // 변경사항 추적
+    private bool HasChanges => !AreModelsEqual(Model, OriginalModel);
+    private int ChangedFieldsCount => GetChangedFields().Count();
+
+    // 업종 목록
+    private readonly List<string> Industries = new()
+    {
+        "IT/소프트웨어", "제조업", "금융업", "유통업", "건설업",
+        "의료/헬스케어", "교육", "미디어/엔터테인먼트", "기타"
+    };
+
+    // 브레드크럼 네비게이션 - MudBlazor.BreadcrumbItem 사용
+    private List<MudBlazor.BreadcrumbItem> BreadcrumbItems => new()
+    {
+        new MudBlazor.BreadcrumbItem("홈", href: "/", icon: Icons.Material.Filled.Home),
+        new MudBlazor.BreadcrumbItem("클라이언트", href: "/clients", icon: Icons.Material.Filled.Business),
+        new MudBlazor.BreadcrumbItem(Client?.CompanyName ?? "상세", href: $"/clients/{ClientId}", icon: Icons.Material.Filled.Visibility),
+        new MudBlazor.BreadcrumbItem("수정", href: null)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientAsync();
+    }
+
+    private async Task LoadClientAsync()
+    {
+        try
+        {
+            SetLoading(true);
+
+            if (string.IsNullOrEmpty(ClientId))
+            {
+                HandleError(new ArgumentException("클라이언트 ID가 필요합니다"), "매개변수 오류");
+                return;
+            }
+
+            // TODO: 실제 API 호출로 교체
+            await Task.Delay(1000);
+            Client = GetSampleClient(ClientId);
+
+            if (Client == null)
+            {
+                HandleError(new Exception("클라이언트를 찾을 수 없습니다"), "데이터 없음");
+                return;
+            }
+
+            // 모델 초기화
+            Model = new UpdateClientRequest
+            {
+                CompanyName = Client.CompanyName,
+                Industry = Client.Industry ?? "",
+                SizeCategory = Client.SizeCategory,
+                ContactPerson = Client.ContactPerson ?? "",
+                ContactEmail = Client.ContactEmail ?? "",
+                ContactPhone = Client.ContactPhone ?? "",
+                ContractValue = Client.ContractValue,
+                Address = Client.Address ?? ""
+            };
+
+            // 원본 모델 백업 (변경사항 추적용)
+            OriginalModel = CloneModel(Model);
+
+            LogComponentInfo($"클라이언트 수정 페이지 로드: {Client.CompanyName}");
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "클라이언트 정보 로딩 실패");
+        }
+        finally
+        {
+            SetLoading(false);
+        }
+    }
+
+    private async Task SaveClientAsync()
+    {
+        try
+        {
+            // 폼 유효성 검사
+            await form.Validate();
+            if (!isFormValid)
+            {
+                Snackbar.Add("입력 정보를 확인해주세요", Severity.Warning);
+                return;
+            }
+
+            if (!HasChanges)
+            {
+                Snackbar.Add("변경된 내용이 없습니다", Severity.Info);
+                return;
+            }
+
+            SetLoading(true);
+
+            // TODO: 실제 API 호출로 교체
+            await Task.Delay(2000);
+
+            // 성공 처리
+            Snackbar.Add($"'{Model.CompanyName}' 클라이언트 정보가 성공적으로 수정되었습니다", Severity.Success);
+            LogComponentInfo($"클라이언트 수정 완료: {Model.CompanyName}");
+
+            // 상세 페이지로 이동
+            NavigationManager.NavigateTo($"/clients/{ClientId}");
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "클라이언트 수정 실패");
+            Snackbar.Add("클라이언트 수정 중 오류가 발생했습니다", Severity.Error);
+        }
+        finally
+        {
+            SetLoading(false);
+        }
+    }
+
+    private void GoBack()
+    {
+        if (HasChanges)
+        {
+            // TODO: 변경사항 확인 다이얼로그 표시
+            // ShowUnsavedChangesDialog();
+        }
+        NavigationManager.NavigateTo($"/clients/{ClientId}");
+    }
+
+    private void ViewClient()
+    {
+        NavigationManager.NavigateTo($"/clients/{ClientId}");
+    }
+
+    private void OnFieldChanged()
+    {
+        StateHasChanged(); // 변경사항 UI 업데이트
+    }
+
+    private void ResetChanges()
+    {
+        Model = CloneModel(OriginalModel);
+        StateHasChanged();
+        Snackbar.Add("변경사항이 취소되었습니다", Severity.Info);
+    }
+
+    // 모델 복사
+    private UpdateClientRequest CloneModel(UpdateClientRequest source)
+    {
+        return new UpdateClientRequest
+        {
+            CompanyName = source.CompanyName,
+            Industry = source.Industry,
+            SizeCategory = source.SizeCategory,
+            ContactPerson = source.ContactPerson,
+            ContactEmail = source.ContactEmail,
+            ContactPhone = source.ContactPhone,
+            ContractValue = source.ContractValue,
+            Address = source.Address
+        };
+    }
+
+    // 모델 비교
+    private bool AreModelsEqual(UpdateClientRequest model1, UpdateClientRequest model2)
+    {
+        return model1.CompanyName == model2.CompanyName &&
+               model1.Industry == model2.Industry &&
+               model1.SizeCategory == model2.SizeCategory &&
+               model1.ContactPerson == model2.ContactPerson &&
+               model1.ContactEmail == model2.ContactEmail &&
+               model1.ContactPhone == model2.ContactPhone &&
+               model1.ContractValue == model2.ContractValue &&
+               model1.Address == model2.Address;
+    }
+
+    // 변경된 필드 목록
+    private IEnumerable<FieldChange> GetChangedFields()
+    {
+        var changes = new List<FieldChange>();
+
+        if (Model.CompanyName != OriginalModel.CompanyName)
+            changes.Add(new FieldChange("회사명", OriginalModel.CompanyName, Model.CompanyName));
+
+        if (Model.Industry != OriginalModel.Industry)
+            changes.Add(new FieldChange("업종", OriginalModel.Industry, Model.Industry));
+
+        if (Model.SizeCategory != OriginalModel.SizeCategory)
+            changes.Add(new FieldChange("회사 규모",
+                GetSizeDisplayName(OriginalModel.SizeCategory),
+                GetSizeDisplayName(Model.SizeCategory)));
+
+        if (Model.ContactPerson != OriginalModel.ContactPerson)
+            changes.Add(new FieldChange("담당자명", OriginalModel.ContactPerson, Model.ContactPerson));
+
+        if (Model.ContactEmail != OriginalModel.ContactEmail)
+            changes.Add(new FieldChange("이메일", OriginalModel.ContactEmail, Model.ContactEmail));
+
+        if (Model.ContactPhone != OriginalModel.ContactPhone)
+            changes.Add(new FieldChange("연락처", OriginalModel.ContactPhone, Model.ContactPhone));
+
+        if (Model.ContractValue != OriginalModel.ContractValue)
+            changes.Add(new FieldChange("계약금액",
+                OriginalModel.ContractValue.ToString("C"),
+                Model.ContractValue.ToString("C")));
+
+        if (Model.Address != OriginalModel.Address)
+            changes.Add(new FieldChange("주소", OriginalModel.Address, Model.Address));
+
+        return changes;
+    }
+
+    private string GetSizeDisplayName(CompanySizeCategory sizeCategory)
+    {
+        return sizeCategory switch
+        {
+            CompanySizeCategory.Small => "소규모",
+            CompanySizeCategory.Medium => "중간규모",
+            CompanySizeCategory.Large => "대규모",
+            _ => "미정"
+        };
+    }
+
+    // 회사명 유효성 검사
+    private IEnumerable<string> ValidateCompanyName(string companyName)
+    {
+        if (string.IsNullOrWhiteSpace(companyName))
+            yield return "회사명은 필수입니다";
+        else if (companyName.Length < 2)
+            yield return "회사명은 최소 2자 이상이어야 합니다";
+        else if (companyName.Length > 200)
+            yield return "회사명은 200자를 초과할 수 없습니다";
+    }
+
+    // 샘플 데이터 생성 (나중에 제거)
+    private ClientDto? GetSampleClient(string clientId)
+    {
+        return new ClientDto
+        {
+            Id = Guid.Parse(clientId),
+            CompanyName = "네이버 클라우드",
+            Industry = "IT/소프트웨어",
+            SizeCategory = CompanySizeCategory.Large,
+            ContactPerson = "김기술",
+            ContactEmail = "kim@navercorp.com",
+            ContactPhone = "02-1234-5678",
+            ContractValue = 500000,
+            Address = "경기도 성남시 분당구 정자일로 95",
+            CreatedAt = DateTime.Now.AddDays(-120),
+            UpdatedAt = DateTime.Now.AddDays(-10)
+        };
+    }
+
+    // 변경사항 추적용 클래스
+    private class FieldChange
+    {
+        public string FieldName { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+
+        public FieldChange(string fieldName, string oldValue, string newValue)
+        {
+            FieldName = fieldName;
+            OldValue = oldValue ?? "";
+            NewValue = newValue ?? "";
+        }
+    }
+}

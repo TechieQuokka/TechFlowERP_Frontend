@@ -1,0 +1,140 @@
+﻿@using MudBlazor
+
+@if (Visible)
+{
+    <div class="loading-container @GetContainerClass()">
+        @if (Overlay)
+        {
+            <div class="loading-overlay"></div>
+        }
+
+        <div class="loading-content">
+            <MudProgressCircular Color="@Color"
+                                 Size="@Size"
+                                 Indeterminate="true"
+                                 Class="loading-spinner" />
+
+            @if (!string.IsNullOrEmpty(Text))
+            {
+                <MudText Typo="Typo.body1"
+                         Color="@GetTextColor()"
+                         Class="loading-text mt-2">
+                    @Text
+                </MudText>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .loading-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .loading-container.fullscreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9999;
+    }
+
+    .loading-container.inline {
+        padding: 2rem;
+    }
+
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(2px);
+        z-index: 1;
+    }
+
+    .loading-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        z-index: 2;
+        position: relative;
+    }
+
+    .loading-text {
+        text-align: center;
+        max-width: 300px;
+    }
+
+    .loading-spinner {
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// 로딩 스피너 표시 여부
+    /// </summary>
+    [Parameter] public bool Visible { get; set; }
+
+    /// <summary>
+    /// 로딩 텍스트
+    /// </summary>
+    [Parameter] public string Text { get; set; } = "로딩 중...";
+
+    /// <summary>
+    /// 스피너 색상
+    /// </summary>
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+
+    /// <summary>
+    /// 스피너 크기
+    /// </summary>
+    [Parameter] public Size Size { get; set; } = Size.Medium;
+
+    /// <summary>
+    /// 전체 화면 오버레이 여부
+    /// </summary>
+    [Parameter] public bool Fullscreen { get; set; } = false;
+
+    /// <summary>
+    /// 배경 오버레이 표시 여부
+    /// </summary>
+    [Parameter] public bool Overlay { get; set; } = true;
+
+    /// <summary>
+    /// 추가 CSS 클래스
+    /// </summary>
+    [Parameter] public string Class { get; set; } = string.Empty;
+
+    private string GetContainerClass()
+    {
+        var classes = new List<string>();
+
+        if (Fullscreen)
+            classes.Add("fullscreen");
+        else
+            classes.Add("inline");
+
+        if (!string.IsNullOrEmpty(Class))
+            classes.Add(Class);
+
+        return string.Join(" ", classes);
+    }
+
+    private Color GetTextColor()
+    {
+        return Fullscreen ? Color.Default : Color.Secondary;
+    }
+}

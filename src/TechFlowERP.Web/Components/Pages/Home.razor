@@ -1,0 +1,171 @@
+﻿@page "/mud-dashboard"
+@using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+<PageTitle>대시보드 - TechFlowERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    @* 🎯 페이지 헤더 *@
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Class="mb-2">
+                대시보드
+            </MudText>
+            <AuthorizeView>
+                <Authorized>
+                    <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                        환영합니다, @(context.User.Identity?.Name ?? "사용자")님!
+                    </MudText>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        @* 🕐 현재 시간 표시 *@
+        <div class="text-right">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @DateTime.Now.ToString("yyyy년 MM월 dd일")
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @DateTime.Now.ToString("HH:mm")
+            </MudText>
+        </div>
+    </div>
+
+    @* 📊 KPI 카드들 *@
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4">
+                <MudCardContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="Icons.Material.Filled.Work"
+                                 Color="Color.Primary"
+                                 Size="Size.Large" />
+                        <div class="ml-4">
+                            <MudText Typo="Typo.h4">12</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                활성 프로젝트
+                            </MudText>
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4">
+                <MudCardContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="Icons.Material.Filled.People"
+                                 Color="Color.Success"
+                                 Size="Size.Large" />
+                        <div class="ml-4">
+                            <MudText Typo="Typo.h4">24</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                활성 직원
+                            </MudText>
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4">
+                <MudCardContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="Icons.Material.Filled.AttachMoney"
+                                 Color="Color.Warning"
+                                 Size="Size.Large" />
+                        <div class="ml-4">
+                            <MudText Typo="Typo.h4">$125K</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                월 매출
+                            </MudText>
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4">
+                <MudCardContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="Icons.Material.Filled.TrendingUp"
+                                 Color="Color.Info"
+                                 Size="Size.Large" />
+                        <div class="ml-4">
+                            <MudText Typo="Typo.h4">87%</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                활용도
+                            </MudText>
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @* 📈 차트 영역 (임시) *@
+    <MudGrid Class="mt-6">
+        <MudItem xs="12" md="8">
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">프로젝트 진행 현황</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <div style="height: 300px;" class="d-flex align-center justify-center">
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            차트 영역 (나중에 구현)
+                        </MudText>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">최근 활동</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudList T="string">
+                        <MudListItem T="string">
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="Icons.Material.Filled.Add" Class="mr-3" />
+                                <div>
+                                    <MudText>새 프로젝트 생성</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">2시간 전</MudText>
+                                </div>
+                            </div>
+                        </MudListItem>
+                        <MudListItem T="string">
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="Icons.Material.Filled.Update" Class="mr-3" />
+                                <div>
+                                    <MudText>프로젝트 상태 업데이트</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">4시간 전</MudText>
+                                </div>
+                            </div>
+                        </MudListItem>
+                        <MudListItem T="string">
+                            <div class="d-flex align-center">
+                                <MudIcon Icon="Icons.Material.Filled.Person" Class="mr-3" />
+                                <div>
+                                    <MudText>새 직원 등록</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">1일 전</MudText>
+                                </div>
+                            </div>
+                        </MudListItem>
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>

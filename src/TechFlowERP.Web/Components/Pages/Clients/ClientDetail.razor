@@ -1,0 +1,592 @@
+﻿@page "/clients/{ClientId}"
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Shared.Components
+@using MudBlazor
+@inherits TechFlowERP.Shared.Components.BaseComponent
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>@(Client?.CompanyName ?? "클라이언트 상세") - TechFlow ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False">
+    <BaseComponent IsLoading="@IsLoading"
+                   HasError="@HasError"
+                   ErrorMessage="@ErrorMessage"
+                   OnRetry="@LoadClientAsync">
+
+        @if (Client != null)
+        {
+            <!-- 페이지 헤더 -->
+            <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                    <MudBreadcrumbs Items="@BreadcrumbItems" Class="mb-2" />
+                    <div class="d-flex align-items-center gap-3">
+                        <MudIcon Icon="Icons.Material.Filled.Business"
+                                 Size="Size.Large"
+                                 Color="Color.Primary" />
+                        <div>
+                            <h2 class="mb-1">@Client.CompanyName</h2>
+                            <div class="d-flex align-items-center gap-2">
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@GetSizeColor(Client.SizeCategory)"
+                                         Variant="Variant.Filled">
+                                    @GetSizeDisplayName(Client.SizeCategory)
+                                </MudChip>
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="Color.Info"
+                                         Variant="Variant.Text">
+                                    @Client.Industry
+                                </MudChip>
+                                <MudText Typo="Typo.body2" Class="text-muted">
+                                    등록일: @Client.CreatedAt.ToString("yyyy-MM-dd")
+                                </MudText>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Outlined"
+                               StartIcon="Icons.Material.Filled.ArrowBack"
+                               OnClick="@GoBack">
+                        목록으로
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Warning"
+                               StartIcon="Icons.Material.Filled.Edit"
+                               OnClick="@EditClient">
+                        수정
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               StartIcon="Icons.Material.Filled.Delete"
+                               OnClick="@DeleteClient">
+                        삭제
+                    </MudButton>
+                </div>
+            </div>
+
+            <MudGrid>
+                <!-- 기본 정보 카드 -->
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-6 h-100">
+                        <MudText Typo="Typo.h6" Class="mb-4">
+                            <MudIcon Icon="Icons.Material.Filled.Info" Class="me-2" />
+                            기본 정보
+                        </MudText>
+
+                        <MudStack Spacing="3">
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">회사명</MudText>
+                                <MudText Typo="Typo.body1" Class="fw-bold">@Client.CompanyName</MudText>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">업종</MudText>
+                                <MudText Typo="Typo.body1">@Client.Industry</MudText>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">회사 규모</MudText>
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@GetSizeColor(Client.SizeCategory)"
+                                         Variant="Variant.Filled">
+                                    @GetSizeDisplayName(Client.SizeCategory)
+                                </MudChip>
+                            </div>
+
+                            @if (Client.ContractValue > 0)
+                            {
+                                <div>
+                                    <MudText Typo="Typo.body2" Class="text-muted">계약 금액</MudText>
+                                    <MudText Typo="Typo.h6" Class="text-success fw-bold">
+                                        $@Client.ContractValue.ToString("N0")
+                                    </MudText>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(Client.Address))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.body2" Class="text-muted">주소</MudText>
+                                    <MudText Typo="Typo.body1">@Client.Address</MudText>
+                                </div>
+                            }
+
+                            <MudDivider />
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">등록일</MudText>
+                                <MudText Typo="Typo.body1">@Client.CreatedAt.ToString("yyyy년 MM월 dd일")</MudText>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">최종 수정</MudText>
+                                <MudText Typo="Typo.body1">@Client.UpdatedAt.ToString("yyyy년 MM월 dd일")</MudText>
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- 담당자 정보 카드 -->
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-6 h-100">
+                        <MudText Typo="Typo.h6" Class="mb-4">
+                            <MudIcon Icon="Icons.Material.Filled.Person" Class="me-2" />
+                            담당자 정보
+                        </MudText>
+
+                        <MudStack Spacing="3">
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">담당자명</MudText>
+                                <MudText Typo="Typo.body1" Class="fw-bold">@Client.ContactPerson</MudText>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">이메일</MudText>
+                                <div class="d-flex align-items-center gap-2">
+                                    <MudText Typo="Typo.body1">@Client.ContactEmail</MudText>
+                                    <MudIconButton Icon="Icons.Material.Filled.Email"
+                                                   Size="Size.Small"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => SendEmail(Client.ContactEmail))"
+                                                   Title="이메일 보내기" />
+                                </div>
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(Client.ContactPhone))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.body2" Class="text-muted">연락처</MudText>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <MudText Typo="Typo.body1">@Client.ContactPhone</MudText>
+                                        <MudIconButton Icon="Icons.Material.Filled.Phone"
+                                                       Size="Size.Small"
+                                                       Color="Color.Primary"
+                                                       OnClick="@(() => CallPhone(Client.ContactPhone))"
+                                                       Title="전화걸기" />
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 빠른 연락 버튼들 -->
+                            <MudDivider />
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted mb-2">빠른 연락</MudText>
+                                <div class="d-flex gap-2">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Size="Size.Small"
+                                               StartIcon="Icons.Material.Filled.Email"
+                                               OnClick="@(() => SendEmail(Client.ContactEmail))">
+                                        이메일
+                                    </MudButton>
+                                    @if (!string.IsNullOrEmpty(Client.ContactPhone))
+                                    {
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Size="Size.Small"
+                                                   StartIcon="Icons.Material.Filled.Phone"
+                                                   OnClick="@(() => CallPhone(Client.ContactPhone))">
+                                            전화
+                                        </MudButton>
+                                    }
+                                    <MudButton Variant="Variant.Outlined"
+                                               Size="Size.Small"
+                                               StartIcon="Icons.Material.Filled.VideoCall"
+                                               OnClick="@ScheduleMeeting">
+                                        회의
+                                    </MudButton>
+                                </div>
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- 통계 정보 카드 -->
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-6 h-100">
+                        <MudText Typo="Typo.h6" Class="mb-4">
+                            <MudIcon Icon="Icons.Material.Filled.Analytics" Class="me-2" />
+                            프로젝트 현황
+                        </MudText>
+
+                        <MudStack Spacing="3">
+                            <div class="text-center">
+                                <MudText Typo="Typo.h4" Color="Color.Primary">@TotalProjects</MudText>
+                                <MudText Typo="Typo.body2" Class="text-muted">총 프로젝트</MudText>
+                            </div>
+
+                            <MudDivider />
+
+                            <div class="d-flex justify-content-between">
+                                <MudText Typo="Typo.body2">진행 중</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">@ActiveProjects</MudChip>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <MudText Typo="Typo.body2">완료됨</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@CompletedProjects</MudChip>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <MudText Typo="Typo.body2">계획 중</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@PlanningProjects</MudChip>
+                            </div>
+
+                            <MudDivider />
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="text-muted">총 프로젝트 금액</MudText>
+                                <MudText Typo="Typo.h6" Class="text-success fw-bold">
+                                    $@TotalProjectValue.ToString("N0")
+                                </MudText>
+                            </div>
+
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="Icons.Material.Filled.Add"
+                                       OnClick="@CreateProject"
+                                       FullWidth="true">
+                                새 프로젝트
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                <!-- 프로젝트 목록 -->
+                <MudItem xs="12">
+                    <MudPaper Class="pa-6">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="Icons.Material.Filled.Work" Class="me-2" />
+                                프로젝트 목록
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                       StartIcon="Icons.Material.Filled.Add"
+                                       OnClick="@CreateProject">
+                                새 프로젝트 생성
+                            </MudButton>
+                        </div>
+
+                        @if (ClientProjects.Any())
+                        {
+                            <MudDataGrid Items="@ClientProjects"
+                                         Dense="true"
+                                         Hover="true"
+                                         Breakpoint="Breakpoint.Sm"
+                                         Height="400px"
+                                         FixedHeader="true">
+
+                                <Columns>
+                                    <PropertyColumn Property="x => x.ProjectCode" Title="프로젝트 코드" />
+                                    <PropertyColumn Property="x => x.Name" Title="프로젝트명">
+                                        <CellTemplate>
+                                            <MudLink Href="@($"/projects/{context.Item.Id}")">
+                                                @context.Item.Name
+                                            </MudLink>
+                                        </CellTemplate>
+                                    </PropertyColumn>
+                                    <PropertyColumn Property="x => x.Status" Title="상태">
+                                        <CellTemplate>
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Color="@GetProjectStatusColor(context.Item.Status)"
+                                                     Variant="Variant.Filled">
+                                                @GetProjectStatusName(context.Item.Status)
+                                            </MudChip>
+                                        </CellTemplate>
+                                    </PropertyColumn>
+                                    <PropertyColumn Property="x => x.StartDate" Title="시작일" Format="yyyy-MM-dd" />
+                                    <PropertyColumn Property="x => x.EndDate" Title="종료일" Format="yyyy-MM-dd" />
+                                    <PropertyColumn Property="x => x.Budget" Title="예산">
+                                        <CellTemplate>
+                                            @if (context.Item.Budget > 0)
+                                            {
+                                                <span class="text-success">$@context.Item.Budget.ToString("N0")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </CellTemplate>
+                                    </PropertyColumn>
+                                </Columns>
+                            </MudDataGrid>
+                        }
+                        else
+                        {
+                            <div class="text-center py-5">
+                                <MudIcon Icon="Icons.Material.Filled.Work"
+                                         Size="Size.Large"
+                                         Class="mb-3 text-muted" />
+                                <MudText Typo="Typo.h6" Class="text-muted mb-3">
+                                    진행 중인 프로젝트가 없습니다
+                                </MudText>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           StartIcon="Icons.Material.Filled.Add"
+                                           OnClick="@CreateProject">
+                                    첫 번째 프로젝트 생성
+                                </MudButton>
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+
+    </BaseComponent>
+</MudContainer>
+
+@code {
+    [Parameter] public string ClientId { get; set; } = string.Empty;
+
+    private ClientDto? Client;
+    private List<ProjectDto> ClientProjects = new();
+
+    // 브레드크럼 네비게이션 - MudBlazor.BreadcrumbItem 사용
+    private List<MudBlazor.BreadcrumbItem> BreadcrumbItems => new()
+    {
+        new MudBlazor.BreadcrumbItem("홈", href: "/", icon: Icons.Material.Filled.Home),
+        new MudBlazor.BreadcrumbItem("클라이언트", href: "/clients", icon: Icons.Material.Filled.Business),
+        new MudBlazor.BreadcrumbItem(Client?.CompanyName ?? "상세", href: null)
+    };
+
+    // 프로젝트 통계
+    private int TotalProjects => ClientProjects.Count;
+    private int ActiveProjects => ClientProjects.Count(p => p.Status == ProjectStatus.Active);
+    private int CompletedProjects => ClientProjects.Count(p => p.Status == ProjectStatus.Completed);
+    private int PlanningProjects => ClientProjects.Count(p => p.Status == ProjectStatus.Planning);
+    private decimal TotalProjectValue => ClientProjects.Where(p => p.Budget > 0).Sum(p => p.Budget);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClientAsync();
+        await LoadClientProjectsAsync();
+    }
+
+    private async Task LoadClientAsync()
+    {
+        try
+        {
+            SetLoading(true);
+
+            if (string.IsNullOrEmpty(ClientId))
+            {
+                HandleError(new ArgumentException("클라이언트 ID가 필요합니다"), "매개변수 오류");
+                return;
+            }
+
+            // TODO: 실제 API 호출로 교체
+            await Task.Delay(1000);
+            Client = GetSampleClient(ClientId);
+
+            if (Client == null)
+            {
+                HandleError(new Exception("클라이언트를 찾을 수 없습니다"), "데이터 없음");
+                return;
+            }
+
+            LogComponentInfo($"클라이언트 로드됨: {Client.CompanyName}");
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "클라이언트 정보 로딩 실패");
+        }
+        finally
+        {
+            SetLoading(false);
+        }
+    }
+
+    private async Task LoadClientProjectsAsync()
+    {
+        try
+        {
+            // TODO: 실제 API 호출로 교체
+            await Task.Delay(500);
+            ClientProjects = GetSampleProjects(ClientId);
+
+            LogComponentInfo($"프로젝트 {ClientProjects.Count}개 로드됨");
+        }
+        catch (Exception ex)
+        {
+            LogComponentInfo($"프로젝트 로딩 실패: {ex.Message}");
+            // 프로젝트 로딩 실패는 치명적이지 않으므로 에러 상태로 설정하지 않음
+        }
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/clients");
+    }
+
+    private void EditClient()
+    {
+        NavigationManager.NavigateTo($"/clients/edit/{ClientId}");
+    }
+
+    private async Task DeleteClient()
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"'{Client?.CompanyName}' 클라이언트를 정말 삭제하시겠습니까?" },
+            { "ButtonText", "삭제" },
+            { "Color", Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<MudMessageBox>("클라이언트 삭제", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                SetLoading(true);
+
+                // TODO: 실제 API 호출로 교체
+                await Task.Delay(1000);
+
+                Snackbar.Add($"'{Client?.CompanyName}' 클라이언트가 삭제되었습니다", Severity.Success);
+                NavigationManager.NavigateTo("/clients");
+            }
+            catch (Exception ex)
+            {
+                HandleError(ex, "클라이언트 삭제 실패");
+                Snackbar.Add("클라이언트 삭제 중 오류가 발생했습니다", Severity.Error);
+            }
+            finally
+            {
+                SetLoading(false);
+            }
+        }
+    }
+
+    private void SendEmail(string email)
+    {
+        NavigationManager.NavigateTo($"mailto:{email}");
+        LogComponentInfo($"이메일 발송: {email}");
+    }
+
+    private void CallPhone(string phone)
+    {
+        NavigationManager.NavigateTo($"tel:{phone}");
+        LogComponentInfo($"전화 연결: {phone}");
+    }
+
+    private void ScheduleMeeting()
+    {
+        Snackbar.Add("회의 일정 기능은 곧 추가될 예정입니다", Severity.Info);
+        LogComponentInfo("회의 일정 요청");
+    }
+
+    private void CreateProject()
+    {
+        NavigationManager.NavigateTo($"/projects/create?clientId={ClientId}");
+    }
+
+    private Color GetSizeColor(CompanySizeCategory sizeCategory)
+    {
+        return sizeCategory switch
+        {
+            CompanySizeCategory.Small => Color.Success,
+            CompanySizeCategory.Medium => Color.Warning,
+            CompanySizeCategory.Large => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private string GetSizeDisplayName(CompanySizeCategory sizeCategory)
+    {
+        return sizeCategory switch
+        {
+            CompanySizeCategory.Small => "소규모",
+            CompanySizeCategory.Medium => "중간규모",
+            CompanySizeCategory.Large => "대규모",
+            _ => "미정"
+        };
+    }
+
+    private Color GetProjectStatusColor(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Active => Color.Success,
+            ProjectStatus.Planning => Color.Warning,
+            ProjectStatus.Completed => Color.Info,
+            ProjectStatus.OnHold => Color.Secondary,
+            ProjectStatus.Cancelled => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private string GetProjectStatusName(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.Planning => "계획중",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Cancelled => "취소",
+            _ => "미정"
+        };
+    }
+
+    // 샘플 데이터 생성 (나중에 제거)
+    private ClientDto? GetSampleClient(string clientId)
+    {
+        return new ClientDto
+        {
+            Id = Guid.Parse(ClientId),
+            CompanyName = "네이버 클라우드",
+            Industry = "IT/소프트웨어",
+            SizeCategory = CompanySizeCategory.Large,
+            ContactPerson = "김기술",
+            ContactEmail = "kim@navercorp.com",
+            ContactPhone = "02-1234-5678",
+            ContractValue = 500000,
+            Address = "경기도 성남시 분당구 정자일로 95",
+            CreatedAt = DateTime.Now.AddDays(-120),
+            UpdatedAt = DateTime.Now.AddDays(-10)
+        };
+    }
+
+    private List<ProjectDto> GetSampleProjects(string clientId)
+    {
+        return new List<ProjectDto>
+        {
+            new() {
+                Id = Guid.NewGuid(),
+                ProjectCode = "NCP-2024-001",
+                Name = "클라우드 인프라 구축",
+                Status = ProjectStatus.Active,
+                StartDate = DateTime.Now.AddDays(-30),
+                EndDate = DateTime.Now.AddDays(60),
+                Budget = 200000
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                ProjectCode = "NCP-2024-002",
+                Name = "AI 플랫폼 개발",
+                Status = ProjectStatus.Planning,
+                StartDate = DateTime.Now.AddDays(15),
+                EndDate = DateTime.Now.AddDays(120),
+                Budget = 300000
+            },
+            new() {
+                Id = Guid.NewGuid(),
+                ProjectCode = "NCP-2023-005",
+                Name = "모니터링 시스템 구축",
+                Status = ProjectStatus.Completed,
+                StartDate = DateTime.Now.AddDays(-180),
+                EndDate = DateTime.Now.AddDays(-30),
+                Budget = 150000
+            }
+        };
+    }
+}

@@ -1,0 +1,692 @@
+﻿@page "/employees/{EmployeeId:guid}"
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Department
+@using TechFlowERP.Models.DTOs.Position
+@using TechFlowERP.Models.Requests.Employee
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject IEmployeeService EmployeeService
+@inject IDepartmentService DepartmentService
+@inject IPositionService PositionService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<EmployeeDetail> Logger
+
+<PageTitle>@(employee?.Name ?? "직원 상세") - 직원 관리</PageTitle>
+
+<div class="container-fluid">
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (employee == null)
+    {
+        <!-- 직원을 찾을 수 없음 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-user-slash fa-4x text-muted mb-4"></i>
+                    <h3>직원을 찾을 수 없습니다</h3>
+                    <p class="text-muted">요청하신 직원 정보가 존재하지 않거나 삭제되었습니다.</p>
+                    <button class="btn btn-primary" @onclick="NavigateToList">
+                        <i class="fas fa-arrow-left me-2"></i>직원 목록으로
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- 📊 Header Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/employees" class="text-decoration-none">직원 관리</a>
+                                </li>
+                                <li class="breadcrumb-item active">@employee.Name</li>
+                            </ol>
+                        </nav>
+                        <div class="d-flex align-items-center">
+                            <div class="avatar-lg bg-primary rounded-circle d-flex align-items-center justify-content-center me-3">
+                                <span class="text-white fw-bold fs-4">@GetInitials(employee.Name)</span>
+                            </div>
+                            <div>
+                                <h2 class="mb-1">@employee.Name</h2>
+                                <div class="d-flex align-items-center gap-2">
+                                    @if (employee.IsActive)
+                                    {
+                                        <span class="badge bg-success">활성</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">비활성</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(employee.DepartmentName))
+                                    {
+                                        <span class="badge bg-light text-dark">@employee.DepartmentName</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(employee.PositionTitle))
+                                    {
+                                        <span class="badge bg-secondary">@employee.PositionTitle</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-primary" @onclick="NavigateToEdit">
+                            <i class="fas fa-edit me-2"></i>수정
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="NavigateToList">
+                            <i class="fas fa-arrow-left me-2"></i>목록
+                        </button>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary dropdown-toggle"
+                                    type="button"
+                                    data-bs-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" href="mailto:@employee.Email">
+                                        <i class="fas fa-envelope me-2"></i>이메일 보내기
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item text-danger" @onclick="ConfirmDelete">
+                                        <i class="fas fa-trash me-2"></i>직원 삭제
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 📝 Main Content -->
+            <div class="col-lg-8">
+                <!-- 기본 정보 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user me-2"></i>기본 정보
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">이메일</label>
+                                    <div class="fw-semibold">
+                                        <a href="mailto:@employee.Email" class="text-decoration-none">
+                                            @employee.Email
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">입사일</label>
+                                    <div class="fw-semibold">
+                                        @employee.HireDate.ToString("yyyy년 MM월 dd일")
+                                        <small class="text-muted">(@GetWorkPeriod(employee.HireDate))</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">부서</label>
+                                    <div class="fw-semibold">
+                                        @if (!string.IsNullOrEmpty(employee.DepartmentName))
+                                        {
+                                            <span>@employee.DepartmentName</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">미배정</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">직급</label>
+                                    <div class="fw-semibold">
+                                        @if (!string.IsNullOrEmpty(employee.PositionTitle))
+                                        {
+                                            <span>@employee.PositionTitle</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">미설정</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">상급자</label>
+                                    <div class="fw-semibold">
+                                        @if (!string.IsNullOrEmpty(employee.ManagerName))
+                                        {
+                                            <span>@employee.ManagerName</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">없음</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">급여</label>
+                                    <div class="fw-semibold">
+                                        @employee.Salary.ToString("N0")만원
+                                        @if (positionInfo != null)
+                                        {
+                                            <small class="text-muted">
+                                                (범위: @positionInfo.MinSalary.ToString("N0") ~ @positionInfo.MaxSalary.ToString("N0")만원)
+                                            </small>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">연차 잔여일수</label>
+                                    <div class="fw-semibold">@@employee.LeaveBalance일</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item">
+                                    <label class="form-label text-muted">상태</label>
+                                    <div class="fw-semibold">
+                                        @if (employee.IsActive)
+                                        {
+                                            <span class="text-success">
+                                                <i class="fas fa-check-circle me-1"></i>활성
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-danger">
+                                                <i class="fas fa-times-circle me-1"></i>비활성
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 기술 스택 -->
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-code me-2"></i>기술 스택
+                        </h5>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="ShowAddSkillModal">
+                            <i class="fas fa-plus me-1"></i>기술 추가
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        @if (employee.Skills.Any())
+                        {
+                            <div class="row g-3">
+                                @foreach (var skill in employee.Skills)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="skill-card p-3 border rounded">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div class="flex-grow-1">
+                                                    <h6 class="mb-1">@skill.Technology</h6>
+                                                    <div class="mb-2">
+                                                        <span class="badge @GetSkillLevelBadgeClass(skill.SkillLevel)">
+                                                            @GetSkillLevelText(skill.SkillLevel)
+                                                        </span>
+                                                    </div>
+                                                    <div class="small text-muted">
+                                                        <div>경력: @@skill.YearsExperience년</div>
+                                                        @if (skill.LastUsedDate.HasValue)
+                                                        {
+                                                            <div>최근 사용: @skill.LastUsedDate.Value.ToString("yyyy-MM-dd")</div>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(skill.Certification))
+                                                        {
+                                                            <div>자격증: @skill.Certification</div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => ConfirmRemoveSkill(skill)">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center py-4 text-muted">
+                                <i class="fas fa-code fa-2x mb-3"></i>
+                                <p>등록된 기술 스택이 없습니다.</p>
+                                <button class="btn btn-outline-primary" @onclick="ShowAddSkillModal">
+                                    <i class="fas fa-plus me-2"></i>첫 번째 기술 추가
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- 프로젝트 참여 이력 (향후 구현) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-project-diagram me-2"></i>프로젝트 참여 이력
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center py-4 text-muted">
+                            <i class="fas fa-project-diagram fa-2x mb-3"></i>
+                            <p>프로젝트 참여 이력 기능은 준비 중입니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 Sidebar -->
+            <div class="col-lg-4">
+                <!-- 통계 카드 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>활동 통계
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>이번 달 근무시간</span>
+                                <strong>@employee.TotalHoursThisMonth 시간</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>활용률</span>
+                                <strong>@employee.UtilizationRate.ToString("F1")%</strong>
+                            </div>
+                            <div class="progress mt-1" style="height: 6px;">
+                                <div class="progress-bar" style="width: @employee.UtilizationRate%"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>참여 프로젝트</span>
+                                <strong>@@employee.CurrentProjectsCount개</strong>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-content-between">
+                                <span>근속기간</span>
+                                <strong>@GetWorkPeriod(employee.HireDate)</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 부서 정보 -->
+                @if (departmentInfo != null)
+                {
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-building me-2"></i>부서 정보
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>@departmentInfo.Name</h6>
+                            <div class="small text-muted mb-2">
+                                <div>총 직원: @@departmentInfo.EmployeeCount명</div>
+                                <div>예산: @departmentInfo.Budget.ToString("N0")만원</div>
+                                @if (!string.IsNullOrEmpty(departmentInfo.ManagerName))
+                                {
+                                    <div>부서장: @departmentInfo.ManagerName</div>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-users me-1"></i>부서원 보기
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <!-- 직급 정보 -->
+                @if (positionInfo != null)
+                {
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-id-card me-2"></i>직급 정보
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>@positionInfo.Title</h6>
+                            <div class="small text-muted mb-2">
+                                <div>레벨: @positionInfo.Level</div>
+                                <div>급여 범위: @positionInfo.MinSalary.ToString("N0") ~ @positionInfo.MaxSalary.ToString("N0")만원</div>
+                                <div>동일 직급: @@positionInfo.EmployeeCount명</div>
+                                @if (positionInfo.IsManagementPosition)
+                                {
+                                    <div><span class="badge bg-warning">관리직</span></div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- 기술 추가 모달 (간단한 구현) -->
+@if (showAddSkillModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">기술 추가</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAddSkillModal"></button>
+                </div>
+                <EditForm Model="newSkill" OnValidSubmit="AddSkill">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">기술명</label>
+                            <InputText @bind-Value="newSkill.Technology" class="form-control" placeholder="C#, React 등" />
+                            <ValidationMessage For="@(() => newSkill.Technology)" class="text-danger" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">숙련도</label>
+                            <InputSelect @bind-Value="newSkill.SkillLevel" class="form-select">
+                                <option value="@SkillLevel.Beginner">초급</option>
+                                <option value="@SkillLevel.Intermediate">중급</option>
+                                <option value="@SkillLevel.Expert">고급</option>
+                            </InputSelect>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">경력 (년)</label>
+                            <InputNumber @bind-Value="newSkill.YearsExperience" class="form-control" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">자격증 (선택)</label>
+                            <InputText @bind-Value="newSkill.Certification" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseAddSkillModal">취소</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isAddingSkill">
+                            @if (isAddingSkill)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            추가
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .avatar-lg {
+        width: 60px;
+        height: 60px;
+    }
+
+    .info-item {
+        margin-bottom: 1rem;
+    }
+
+    .skill-card {
+        transition: all 0.2s ease;
+    }
+
+        .skill-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+</style>
+
+@code {
+    [Parameter] public Guid EmployeeId { get; set; }
+
+    // 📊 Data Properties
+    private EmployeeDto? employee;
+    private DepartmentDto? departmentInfo;
+    private PositionDto? positionInfo;
+
+    // 🔄 State Properties
+    private bool isLoading = true;
+    private bool showAddSkillModal = false;
+    private bool isAddingSkill = false;
+    private AddEmployeeSkillRequest newSkill = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEmployeeData();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (employee?.Id != EmployeeId)
+        {
+            await LoadEmployeeData();
+        }
+    }
+
+    private async Task LoadEmployeeData()
+    {
+        isLoading = true;
+        employee = null;
+        departmentInfo = null;
+        positionInfo = null;
+        StateHasChanged();
+
+        try
+        {
+            employee = await EmployeeService.GetEmployeeByIdAsync(EmployeeId);
+
+            if (employee != null)
+            {
+                // 부서와 직급 정보 로드
+                var tasks = new List<Task>();
+
+                if (employee.DepartmentId.HasValue)
+                {
+                    tasks.Add(LoadDepartmentInfo(employee.DepartmentId.Value));
+                }
+
+                if (employee.PositionId.HasValue)
+                {
+                    tasks.Add(LoadPositionInfo(employee.PositionId.Value));
+                }
+
+                if (tasks.Any())
+                {
+                    await Task.WhenAll(tasks);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 데이터 로드 중 오류 발생: {EmployeeId}", EmployeeId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadDepartmentInfo(Guid departmentId)
+    {
+        departmentInfo = await DepartmentService.GetDepartmentByIdAsync(departmentId);
+    }
+
+    private async Task LoadPositionInfo(Guid positionId)
+    {
+        positionInfo = await PositionService.GetPositionByIdAsync(positionId);
+    }
+
+    // 🔧 Skill Management
+    private void ShowAddSkillModal()
+    {
+        newSkill = new AddEmployeeSkillRequest { EmployeeId = EmployeeId };
+        showAddSkillModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddSkillModal()
+    {
+        showAddSkillModal = false;
+        newSkill = new();
+        StateHasChanged();
+    }
+
+    private async Task AddSkill()
+    {
+        if (isAddingSkill) return;
+
+        isAddingSkill = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await EmployeeService.AddEmployeeSkillAsync(newSkill);
+            if (result != null)
+            {
+                // 성공 시 직원 데이터 다시 로드
+                await LoadEmployeeData();
+                CloseAddSkillModal();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "기술 추가 중 오류 발생");
+        }
+        finally
+        {
+            isAddingSkill = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmRemoveSkill(EmployeeSkillDto skill)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"'{skill.Technology}' 기술을 정말 삭제하시겠습니까?");
+
+        if (confirmed)
+        {
+            await RemoveSkill(skill.Id);
+        }
+    }
+
+    private async Task RemoveSkill(Guid skillId)
+    {
+        var success = await EmployeeService.RemoveEmployeeSkillAsync(skillId);
+        if (success)
+        {
+            await LoadEmployeeData(); // 데이터 새로고침
+        }
+    }
+
+    // 🗑️ Delete Employee
+    private async Task ConfirmDelete()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
+            $"'{employee?.Name}' 직원을 정말 삭제하시겠습니까?");
+
+        if (confirmed)
+        {
+            var success = await EmployeeService.DeleteEmployeeAsync(EmployeeId);
+            if (success)
+            {
+                Navigation.NavigateTo("/employees");
+            }
+        }
+    }
+
+    // 🧭 Navigation
+    private void NavigateToList()
+    {
+        Navigation.NavigateTo("/employees");
+    }
+
+    private void NavigateToEdit()
+    {
+        Navigation.NavigateTo($"/employees/{EmployeeId}/edit");
+    }
+
+    // 🛠️ Helper Methods
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 2)
+        {
+            return $"{words[0][0]}{words[1][0]}".ToUpper();
+        }
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private string GetWorkPeriod(DateTime hireDate)
+    {
+        var period = DateTime.Now - hireDate;
+        var years = period.Days / 365;
+        var months = (period.Days % 365) / 30;
+
+        if (years > 0)
+        {
+            return months > 0 ? $"{years}년 {months}개월" : $"{years}년";
+        }
+        return months > 0 ? $"{months}개월" : "신입";
+    }
+
+    private string GetSkillLevelText(SkillLevel level)
+    {
+        return level switch
+        {
+            SkillLevel.Beginner => "초급",
+            SkillLevel.Intermediate => "중급",
+            SkillLevel.Expert => "고급",
+            _ => "초급"
+        };
+    }
+
+    private string GetSkillLevelBadgeClass(SkillLevel level)
+    {
+        return level switch
+        {
+            SkillLevel.Beginner => "bg-info",
+            SkillLevel.Intermediate => "bg-warning",
+            SkillLevel.Expert => "bg-success",
+            _ => "bg-info"
+        };
+    }
+}

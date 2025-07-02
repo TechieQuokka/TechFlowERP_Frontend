@@ -1,0 +1,583 @@
+﻿@using TechFlowERP.Models.DTOs.User
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.User
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@inject IUserManagementService UserManagementService
+@inject IJSRuntime JSRuntime
+@inject ILogger<UserFormModal> Logger
+
+<div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userModalLabel">
+                    <i class="fas fa-user-cog me-2"></i>
+                    @(isEditMode ? "사용자 정보 수정" : "새 사용자 추가")
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <EditForm Model="formModel" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="modal-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">처리 중...</span>
+                            </div>
+                            <p class="mt-2 text-muted">@(isEditMode ? "수정" : "저장") 중입니다...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- 계정 정보 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3">
+                                    <i class="fas fa-user me-2"></i>계정 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">
+                                        사용자명 <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <InputText id="username" class="form-control" @bind-Value="formModel.Username"
+                                                   placeholder="영문, 숫자 조합" @oninput="OnUsernameChanged" />
+                                        @if (isCheckingUsername)
+                                        {
+                                            <span class="input-group-text">
+                                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            </span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(formModel.Username) && formModel.Username.Length >= 3)
+                                        {
+                                            <span class="input-group-text">
+                                                <i class="fas fa-@(isUsernameAvailable ? "check text-success" : "times text-danger")"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    <ValidationMessage For="() => formModel.Username" class="text-danger" />
+                                    @if (!isUsernameAvailable && !string.IsNullOrEmpty(formModel.Username))
+                                    {
+                                        <div class="text-danger small">이미 사용 중인 사용자명입니다.</div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">
+                                        이메일 <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <InputText id="email" class="form-control" @bind-Value="formModel.Email"
+                                                   placeholder="user@company.com" @oninput="OnEmailChanged" />
+                                        @if (isCheckingEmail)
+                                        {
+                                            <span class="input-group-text">
+                                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            </span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(formModel.Email) && formModel.Email.Contains("@"))
+                                        {
+                                            <span class="input-group-text">
+                                                <i class="fas fa-@(isEmailAvailable ? "check text-success" : "times text-danger")"></i>
+                                            </span>
+                                        }
+                                    </div>
+                                    <ValidationMessage For="() => formModel.Email" class="text-danger" />
+                                    @if (!isEmailAvailable && !string.IsNullOrEmpty(formModel.Email))
+                                    {
+                                        <div class="text-danger small">이미 사용 중인 이메일입니다.</div>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (!isEditMode)
+                            {
+                                <div class="col-12">
+                                    <div class="mb-3">
+                                        <label for="password" class="form-label">
+                                            초기 비밀번호 <span class="text-danger">*</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <InputText id="password" type="@(showPassword ? "text" : "password")"
+                                                       class="form-control" @bind-Value="formModel.Password"
+                                                       placeholder="대소문자, 숫자, 특수문자 포함 8자 이상" />
+                                            <button type="button" class="btn btn-outline-secondary" @onclick="TogglePasswordVisibility">
+                                                <i class="fas fa-@(showPassword ? "eye-slash" : "eye")"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary" @onclick="GeneratePassword">
+                                                <i class="fas fa-key"></i>
+                                            </button>
+                                        </div>
+                                        <ValidationMessage For="() => formModel.Password" class="text-danger" />
+                                        <div class="form-text">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            사용자는 첫 로그인 시 비밀번호를 변경해야 합니다.
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 권한 및 역할 -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3 mt-3">
+                                    <i class="fas fa-shield-alt me-2"></i>권한 및 역할
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="role" class="form-label">
+                                        역할 <span class="text-danger">*</span>
+                                    </label>
+                                    <select id="role" class="form-select" value="@((int)formModel.Role)" @onchange="OnRoleChanged">
+                                        <option value="0">역할 선택</option>
+                                        <option value="@((int)UserRole.ReadOnly)">읽기전용 - 시스템 조회만 가능</option>
+                                        <option value="@((int)UserRole.Employee)">직원 - 기본 업무 기능</option>
+                                        <option value="@((int)UserRole.HR)">인사 - 직원 관리</option>
+                                        <option value="@((int)UserRole.Finance)">재무 - 회계 및 재무 관리</option>
+                                        <option value="@((int)UserRole.Manager)">매니저 - 팀 및 프로젝트 관리</option>
+                                        <option value="@((int)UserRole.Admin)">관리자 - 전체 시스템 관리</option>
+                                    </select>
+                                    <ValidationMessage For="() => formModel.Role" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="employeeId" class="form-label">연결할 직원</label>
+                                    <select id="employeeId" class="form-select" value="@formModel.EmployeeId" @onchange="OnEmployeeChanged">
+                                        <option value="">직원 선택 (선택사항)</option>
+                                        @foreach (var employee in filteredEmployees)
+                                        {
+                                            <option value="@employee.Id">
+                                                @employee.Name - @employee.DepartmentName (@employee.PositionTitle)
+                                            </option>
+                                        }
+                                    </select>
+                                    <div class="form-text">
+                                        직원 정보와 연결하면 부서 및 직급 정보가 자동으로 설정됩니다.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 역할별 권한 설명 -->
+                            @if (formModel.Role != 0)
+                            {
+                                <div class="col-12">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6 class="card-title">@GetRoleDisplayName(formModel.Role) 권한</h6>
+                                            <div class="role-permissions">
+                                                @foreach (var permission in GetRolePermissions(formModel.Role))
+                                                {
+                                                    <div class="permission-item">
+                                                        <i class="fas fa-check text-success me-2"></i>@permission
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 연결된 직원 정보 미리보기 -->
+                            @if (selectedEmployee != null)
+                            {
+                                <div class="col-12">
+                                    <div class="card border-info mt-3">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-user-tie me-2"></i>연결된 직원 정보
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <strong>이름:</strong> @selectedEmployee.Name<br />
+                                                    <strong>이메일:</strong> @selectedEmployee.Email<br />
+                                                    <strong>입사일:</strong> @selectedEmployee.HireDate.ToString("yyyy-MM-dd")
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <strong>부서:</strong> @selectedEmployee.DepartmentName<br />
+                                                    <strong>직급:</strong> @selectedEmployee.PositionTitle<br />
+                                                    <strong>매니저:</strong> @(selectedEmployee.ManagerName ?? "없음")
+                                                </div>
+                                            </div>
+                                            @if (formModel.Email != selectedEmployee.Email)
+                                            {
+                                                <div class="alert alert-warning mt-2 mb-0">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                                    이메일이 직원 정보와 다릅니다. 동일한 이메일 사용을 권장합니다.
+                                                    <button type="button" class="btn btn-link btn-sm p-0 ms-2" @onclick="SyncEmailFromEmployee">
+                                                        직원 이메일로 동기화
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled="@isLoading">
+                        취소
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@(isLoading || !IsFormValid())">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i>
+                        }
+                        @(isEditMode ? "수정" : "저장")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnUserSaved { get; set; }
+    [Parameter] public List<EmployeeDto> Employees { get; set; } = new();
+
+    private bool isEditMode = false;
+    private bool isLoading = false;
+    private Guid? currentUserId = null;
+
+    private UserFormModel formModel = new();
+    private EmployeeDto? selectedEmployee = null;
+    private List<EmployeeDto> filteredEmployees = new();
+
+    // 유효성 검증 상태
+    private bool isCheckingUsername = false;
+    private bool isCheckingEmail = false;
+    private bool isUsernameAvailable = true;
+    private bool isEmailAvailable = true;
+    private bool showPassword = false;
+
+    public async Task OpenAsync(UserDto? user = null)
+    {
+        isEditMode = user != null;
+        currentUserId = user?.UserId;
+
+        if (isEditMode && user != null)
+        {
+            // 수정 모드: 기존 데이터 로드
+            formModel = new UserFormModel
+            {
+                Username = user.Username,
+                Email = user.Email,
+                Role = user.Role,
+                EmployeeId = user.EmployeeId
+            };
+
+            isUsernameAvailable = true;
+            isEmailAvailable = true;
+        }
+        else
+        {
+            // 생성 모드: 빈 폼
+            formModel = new UserFormModel();
+            isUsernameAvailable = true;
+            isEmailAvailable = true;
+        }
+
+        UpdateFilteredEmployees();
+        UpdateSelectedEmployee();
+
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('userModal')).show()");
+        StateHasChanged();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (!IsFormValid()) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (isEditMode && currentUserId.HasValue)
+            {
+                // 수정
+                var updateRequest = new UpdateUserRequest
+                {
+                    UserId = currentUserId.Value,
+                    Username = formModel.Username,
+                    Email = formModel.Email,
+                    Role = formModel.Role,
+                    EmployeeId = formModel.EmployeeId
+                };
+
+                var result = await UserManagementService.UpdateUserAsync(updateRequest);
+
+                if (result != null)
+                {
+                    await OnUserSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "사용자 수정에 실패했습니다.");
+                }
+            }
+            else
+            {
+                // 생성
+                var createRequest = new CreateUserRequest
+                {
+                    Username = formModel.Username,
+                    Email = formModel.Email,
+                    Password = formModel.Password,
+                    Role = formModel.Role,
+                    EmployeeId = formModel.EmployeeId
+                };
+
+                var result = await UserManagementService.CreateUserAsync(createRequest);
+
+                if (result != null)
+                {
+                    await OnUserSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "사용자 생성에 실패했습니다.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "사용자 {Action} 중 오류 발생", isEditMode ? "수정" : "생성");
+            await JSRuntime.InvokeVoidAsync("alert", $"사용자 {(isEditMode ? "수정" : "생성")} 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('userModal')).hide()");
+    }
+
+    private async Task OnUsernameChanged(ChangeEventArgs e)
+    {
+        formModel.Username = e.Value?.ToString() ?? string.Empty;
+
+        if (formModel.Username.Length >= 3)
+        {
+            isCheckingUsername = true;
+            StateHasChanged();
+
+            await Task.Delay(500); // 디바운싱
+
+            isUsernameAvailable = await UserManagementService.IsUsernameAvailableAsync(formModel.Username, currentUserId);
+            isCheckingUsername = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnEmailChanged(ChangeEventArgs e)
+    {
+        formModel.Email = e.Value?.ToString() ?? string.Empty;
+
+        if (formModel.Email.Contains("@"))
+        {
+            isCheckingEmail = true;
+            StateHasChanged();
+
+            await Task.Delay(500); // 디바운싱
+
+            isEmailAvailable = await UserManagementService.IsEmailAvailableAsync(formModel.Email, currentUserId);
+            isCheckingEmail = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnRoleChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var roleValue))
+        {
+            formModel.Role = (UserRole)roleValue;
+        }
+        else
+        {
+            formModel.Role = UserRole.Employee;
+        }
+
+        UpdateFilteredEmployees();
+        StateHasChanged();
+    }
+
+    private void OnEmployeeChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var employeeId))
+        {
+            formModel.EmployeeId = employeeId;
+        }
+        else
+        {
+            formModel.EmployeeId = null;
+        }
+
+        UpdateSelectedEmployee();
+        StateHasChanged();
+    }
+
+    private void UpdateFilteredEmployees()
+    {
+        // 역할에 따라 직원 필터링 (예: 매니저 역할은 관리직만)
+        filteredEmployees = formModel.Role switch
+        {
+            UserRole.Manager => Employees.Where(e =>
+                e.PositionTitle?.Contains("팀장") == true ||
+                e.PositionTitle?.Contains("부장") == true ||
+                e.PositionTitle?.Contains("이사") == true).ToList(),
+            UserRole.Admin => Employees.Where(e =>
+                e.PositionTitle?.Contains("관리") == true ||
+                e.DepartmentName?.Contains("IT") == true).ToList(),
+            _ => Employees.ToList()
+        };
+    }
+
+    private void UpdateSelectedEmployee()
+    {
+        selectedEmployee = formModel.EmployeeId.HasValue
+            ? Employees.FirstOrDefault(e => e.Id == formModel.EmployeeId.Value)
+            : null;
+    }
+
+    private void SyncEmailFromEmployee()
+    {
+        if (selectedEmployee != null)
+        {
+            formModel.Email = selectedEmployee.Email;
+            StateHasChanged();
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        showPassword = !showPassword;
+    }
+
+    private void GeneratePassword()
+    {
+        var random = new Random();
+        var chars = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$%^&*";
+        formModel.Password = new string(Enumerable.Repeat(chars, 12)
+            .Select(s => s[random.Next(s.Length)]).ToArray());
+        StateHasChanged();
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(formModel.Username) &&
+               !string.IsNullOrWhiteSpace(formModel.Email) &&
+               formModel.Role != 0 &&
+               isUsernameAvailable &&
+               isEmailAvailable &&
+               (isEditMode || !string.IsNullOrWhiteSpace(formModel.Password));
+    }
+
+    private string GetRoleDisplayName(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.Admin => "관리자",
+            UserRole.Manager => "매니저",
+            UserRole.Employee => "직원",
+            UserRole.Finance => "재무",
+            UserRole.HR => "인사",
+            UserRole.ReadOnly => "읽기전용",
+            _ => "알 수 없음"
+        };
+    }
+
+    private List<string> GetRolePermissions(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.Admin => new List<string>
+            {
+                "전체 시스템 관리", "사용자 계정 관리", "시스템 설정 변경", "감사 로그 조회", "백업 및 복원"
+            },
+            UserRole.Manager => new List<string>
+            {
+                "팀 관리", "프로젝트 관리", "직원 업무 할당", "시간 승인", "팀 성과 조회"
+            },
+            UserRole.Employee => new List<string>
+            {
+                "개인 업무 관리", "시간 기록", "프로젝트 참여", "개인 정보 수정"
+            },
+            UserRole.Finance => new List<string>
+            {
+                "재무 데이터 관리", "인보이스 생성", "급여 관리", "예산 관리", "재무 보고서"
+            },
+            UserRole.HR => new List<string>
+            {
+                "직원 정보 관리", "휴가 관리", "성과 평가", "채용 관리", "인사 보고서"
+            },
+            UserRole.ReadOnly => new List<string>
+            {
+                "데이터 조회만 가능", "보고서 열람", "개인 정보 조회"
+            },
+            _ => new List<string>()
+        };
+    }
+
+    // 폼 모델 클래스
+    private class UserFormModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public UserRole Role { get; set; } = UserRole.Employee;
+        public Guid? EmployeeId { get; set; }
+    }
+}
+
+<style>
+    .permission-item {
+        padding: 0.25rem 0;
+        font-size: 0.875rem;
+    }
+
+    .role-permissions {
+        max-height: 150px;
+        overflow-y: auto;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .input-group .btn {
+        border-left: 0;
+    }
+
+    .form-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+</style>

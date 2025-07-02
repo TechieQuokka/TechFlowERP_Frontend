@@ -1,0 +1,487 @@
+﻿@page "/charts-demo"
+@using TechFlowERP.Shared.Components.Charts.Base
+@using TechFlowERP.Shared.Models.Charts
+@using Radzen
+@using Radzen.Blazor
+
+<PageTitle>Charts Demo - TechFlow ERP</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-3">📊 Chart 컴포넌트 데모</h2>
+            <p class="text-muted">IT 서비스업 특화 ERP 시스템의 차트 컴포넌트들을 테스트해보세요.</p>
+            
+            <div class="d-flex gap-2 mb-4">
+                <button class="btn btn-primary" @onclick="RefreshAllCharts">
+                    <i class="fas fa-sync-alt"></i> 모든 차트 새로고침
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="ToggleTheme">
+                    <i class="fas @(IsDarkTheme ? "fa-sun" : "fa-moon")"></i> 
+                    @(IsDarkTheme ? "라이트" : "다크") 모드
+                </button>
+                <button class="btn btn-outline-info" @onclick="GenerateRandomData">
+                    <i class="fas fa-dice"></i> 랜덤 데이터 생성
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 프로젝트 상태 파이 차트 -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">프로젝트 상태 분포</h5>
+                </div>
+                <div class="card-body">
+                    @if (IsLoading)
+                    {
+                        <div class="d-flex justify-content-center align-items-center" style="height: 300px;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">로딩 중...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <RadzenChart style="width: 100%; height: 300px;">
+                            <RadzenPieSeries Data="@ProjectStatusData" 
+                                           CategoryProperty="StatusName" 
+                                           ValueProperty="Count"
+                                           Title="프로젝트 수"
+                                           Fills="@ProjectStatusColors" />
+                            <RadzenChartTooltipOptions Visible="true" />
+                            <RadzenChartLegend Position="LegendPosition.Bottom" />
+                        </RadzenChart>
+                    }
+                </div>
+            </div>
+        </div>
+        
+        <!-- 매출 추이 라인 차트 -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">월별 매출 추이</h5>
+                </div>
+                <div class="card-body">
+                    @if (IsLoading)
+                    {
+                        <div class="d-flex justify-content-center align-items-center" style="height: 300px;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">로딩 중...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <RadzenChart style="width: 100%; height: 300px;">
+                            <RadzenLineSeries Data="@RevenueData" 
+                                            CategoryProperty="Period" 
+                                            ValueProperty="Amount"
+                                            Title="매출"
+                                            Stroke="@ChartColors.Financial["Revenue"]"
+                                            StrokeWidth="3"
+                                            Smooth="true" />
+                            <RadzenCategoryAxis Padding="20" />
+                            <RadzenValueAxis Formatter="@FormatCurrency">
+                                <RadzenGridLines Visible="true" />
+                                <RadzenAxisTitle Text="매출 (USD)" />
+                            </RadzenValueAxis>
+                            <RadzenChartTooltipOptions Visible="true" />
+                            <RadzenChartLegend Position="LegendPosition.Top" />
+                        </RadzenChart>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 직원 활용도 바 차트 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">직원 활용도</h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary @(MaxEmployees == 5 ? "active" : "")" 
+                                @onclick="() => SetMaxEmployees(5)">Top 5</button>
+                        <button class="btn btn-outline-primary @(MaxEmployees == 10 ? "active" : "")" 
+                                @onclick="() => SetMaxEmployees(10)">Top 10</button>
+                        <button class="btn btn-outline-primary @(MaxEmployees == 0 ? "active" : "")" 
+                                @onclick="() => SetMaxEmployees(0)">전체</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (IsLoading)
+                    {
+                        <div class="d-flex justify-content-center align-items-center" style="height: 400px;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">로딩 중...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <RadzenChart style="width: 100%; height: 400px;">
+                            <RadzenColumnSeries Data="@FilteredUtilizationData" 
+                                              CategoryProperty="EmployeeName" 
+                                              ValueProperty="BillableHours"
+                                              Title="빌러블 시간"
+                                              Fill="@ChartColors.Utilization["Billable"]" />
+                            <RadzenColumnSeries Data="@FilteredUtilizationData" 
+                                              CategoryProperty="EmployeeName" 
+                                              ValueProperty="NonBillableHours"
+                                              Title="논빌러블 시간"
+                                              Fill="@ChartColors.Utilization["NonBillable"]" />
+                            <RadzenCategoryAxis Padding="20" />
+                            <RadzenValueAxis Formatter="@FormatHours">
+                                <RadzenGridLines Visible="true" />
+                                <RadzenAxisTitle Text="시간 (h)" />
+                            </RadzenValueAxis>
+                            <RadzenChartTooltipOptions Visible="true" />
+                            <RadzenChartLegend Position="LegendPosition.Top" />
+                            <RadzenColumnOptions Margin="10" />
+                        </RadzenChart>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 통계 및 설정 -->
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📊 차트 통계</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">총 프로젝트</h6>
+                                <h4 class="text-primary">@TotalProjects</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">월 평균 매출</h6>
+                                <h4 class="text-success">@FormatCurrency(AverageRevenue)</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">평균 활용도</h6>
+                                <h4 class="text-info">@FormatPercentage(AverageUtilization)</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">⚙️ 설정</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">차트 테마</label>
+                        <select class="form-select" @onchange="OnThemeChanged">
+                            <option value="light">라이트</option>
+                            <option value="dark">다크</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">업데이트 간격</label>
+                        <select class="form-select" @onchange="OnIntervalChanged">
+                            <option value="5">5초</option>
+                            <option value="10" selected>10초</option>
+                            <option value="30">30초</option>
+                            <option value="0">수동</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline-success w-100" @onclick="ExportData">
+                        <i class="fas fa-download"></i> 데이터 내보내기
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 이벤트 로그 -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <h5 class="card-title mb-0">📋 이벤트 로그</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearEventLog">
+                        <i class="fas fa-trash"></i> 지우기
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div style="height: 150px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                        @if (EventLog.Any())
+                        {
+                            @foreach (var logEntry in EventLog.TakeLast(10).Reverse())
+                            {
+                                <div class="small text-muted mb-1">
+                                    <span class="text-primary">[{{logEntry.Time:HH:mm:ss}}]</span> 
+                                    {{logEntry.Message}}
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-muted text-center">이벤트 로그가 비어있습니다.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // 설정
+    private bool IsDarkTheme = false;
+    private bool IsLoading = false;
+    private int MaxEmployees = 10;
+    private int UpdateInterval = 10;
+
+    // 데이터
+    private List<ProjectStatusChartData> ProjectStatusData = new();
+    private List<RevenueChartData> RevenueData = new();
+    private List<UtilizationChartData> UtilizationData = new();
+
+    // 통계
+    private int TotalProjects => ProjectStatusData.Sum(p => p.Count);
+    private decimal AverageRevenue => RevenueData.Any() ? RevenueData.Average(r => r.Amount) : 0;
+    private double AverageUtilization => UtilizationData.Any() ? UtilizationData.Average(u => u.UtilizationRate) : 0;
+
+    // 필터링된 데이터
+    private List<UtilizationChartData> FilteredUtilizationData =>
+        MaxEmployees == 0 ? UtilizationData : UtilizationData.Take(MaxEmployees).ToList();
+
+    // 색상 배열
+    private string[] ProjectStatusColors => 
+        ProjectStatusData.Select(d => ChartColors.ProjectStatus.GetValueOrDefault(d.Status, "#cccccc")).ToArray();
+
+    // 이벤트 로그
+    private List<EventLogEntry> EventLog = new();
+
+    // 타이머
+    private Timer? _updateTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GenerateRandomData();
+        StartAutoUpdate();
+        AddLog("차트 데모 페이지 초기화 완료");
+    }
+
+    private async Task RefreshAllCharts()
+    {
+        IsLoading = true;
+        StateHasChanged();
+        
+        AddLog("모든 차트 새로고침 시작");
+        
+        await Task.Delay(1000); // 시뮬레이션
+        await GenerateRandomData();
+        
+        IsLoading = false;
+        StateHasChanged();
+        
+        AddLog("모든 차트 새로고침 완료");
+    }
+
+    private void ToggleTheme()
+    {
+        IsDarkTheme = !IsDarkTheme;
+        AddLog($"{(IsDarkTheme ? "다크" : "라이트")} 테마로 변경");
+    }
+
+    private void SetMaxEmployees(int count)
+    {
+        MaxEmployees = count;
+        AddLog($"표시 직원 수 변경: {(count == 0 ? "전체" : $"상위 {count}명")}");
+        StateHasChanged();
+    }
+
+    private async Task GenerateRandomData()
+    {
+        AddLog("랜덤 데이터 생성 중...");
+        
+        ProjectStatusData = GenerateProjectStatusData();
+        RevenueData = GenerateRevenueData();
+        UtilizationData = GenerateUtilizationData();
+        
+        AddLog("랜덤 데이터 생성 완료");
+        StateHasChanged();
+    }
+
+    private string FormatPercentage(object value)
+    {
+        if (value is double d)
+            return $"{d:F1}%";
+        return "-";
+    }
+
+
+    private void OnThemeChanged(ChangeEventArgs e)
+    {
+        IsDarkTheme = e.Value?.ToString() == "dark";
+        AddLog($"테마 변경: {e.Value}");
+    }
+
+    private void OnIntervalChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var interval))
+        {
+            UpdateInterval = interval;
+            StartAutoUpdate();
+            AddLog($"업데이트 간격 변경: {(interval == 0 ? "수동" : $"{interval}초")}");
+        }
+    }
+
+    private void StartAutoUpdate()
+    {
+        _updateTimer?.Dispose();
+        
+        if (UpdateInterval > 0)
+        {
+            _updateTimer = new Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await GenerateRandomData();
+                });
+            }, null, TimeSpan.FromSeconds(UpdateInterval), TimeSpan.FromSeconds(UpdateInterval));
+        }
+    }
+
+    private void ExportData()
+    {
+        AddLog("데이터 내보내기 기능 (구현 예정)");
+    }
+
+    private void ClearEventLog()
+    {
+        EventLog.Clear();
+        AddLog("이벤트 로그 클리어됨");
+    }
+
+    private void AddLog(string message)
+    {
+        EventLog.Add(new EventLogEntry { Time = DateTime.Now, Message = message });
+        if (EventLog.Count > 50) // 최대 50개 유지
+        {
+            EventLog.RemoveAt(0);
+        }
+        StateHasChanged();
+    }
+
+    // 포맷터 메서드들
+    private string FormatCurrency(object value)
+    {
+        if (value is decimal decimalValue)
+            return $"${decimalValue:N0}";
+        return value?.ToString() ?? "";
+    }
+
+    private string FormatHours(object value)
+    {
+        if (value is double doubleValue)
+            return $"{doubleValue:F1}h";
+        return value?.ToString() ?? "";
+    }
+
+    // 샘플 데이터 생성 메서드들
+    private List<ProjectStatusChartData> GenerateProjectStatusData()
+    {
+        var random = new Random();
+        var statuses = new[] { "Active", "Planning", "Completed", "OnHold", "Cancelled" };
+        var names = new[] { "진행중", "계획중", "완료", "보류", "취소" };
+        
+        var data = new List<ProjectStatusChartData>();
+        var total = 0;
+        
+        for (int i = 0; i < statuses.Length; i++)
+        {
+            var count = random.Next(1, 15);
+            total += count;
+            data.Add(new ProjectStatusChartData
+            {
+                Status = statuses[i],
+                StatusName = names[i],
+                Count = count,
+                Color = ChartColors.ProjectStatus[statuses[i]]
+            });
+        }
+        
+        data.ForEach(d => d.Percentage = (double)d.Count / total * 100);
+        return data;
+    }
+
+    private List<RevenueChartData> GenerateRevenueData()
+    {
+        var random = new Random();
+        var data = new List<RevenueChartData>();
+        var baseDate = DateTime.Now.AddMonths(-11);
+        
+        for (int i = 0; i < 12; i++)
+        {
+            var date = baseDate.AddMonths(i);
+            var amount = 80000 + (decimal)(random.NextDouble() * 120000);
+            
+            data.Add(new RevenueChartData
+            {
+                Date = date,
+                Amount = Math.Round(amount, 0),
+                Period = date.ToString("MMM yyyy"),
+                Category = "Revenue"
+            });
+        }
+        
+        return data;
+    }
+
+    private List<UtilizationChartData> GenerateUtilizationData()
+    {
+        var random = new Random();
+        var employees = new[] { "김개발", "이프론트", "박백엔드", "최디자인", "정기획", "강테스트", "윤데브옵스", "임풀스택", "한시니어", "조주니어", "서매니저", "노시스템" };
+        
+        return employees.Select(emp =>
+        {
+            var billable = 100 + random.NextDouble() * 80;
+            var nonBillable = 20 + random.NextDouble() * 60;
+            var total = billable + nonBillable;
+            
+            return new UtilizationChartData
+            {
+                EmployeeName = emp,
+                EmployeeId = Guid.NewGuid().ToString(),
+                BillableHours = Math.Round(billable, 1),
+                NonBillableHours = Math.Round(nonBillable, 1),
+                TotalHours = Math.Round(total, 1),
+                UtilizationRate = Math.Round(billable / total * 100, 1),
+                Department = "개발팀"
+            };
+        }).OrderByDescending(u => u.UtilizationRate).ToList();
+    }
+
+    public void Dispose()
+    {
+        _updateTimer?.Dispose();
+    }
+
+    private class EventLogEntry
+    {
+        public DateTime Time { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+}

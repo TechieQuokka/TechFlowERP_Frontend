@@ -1,0 +1,806 @@
+﻿@page "/projects/{ProjectId:guid}/edit"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.Project
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject IProjectService ProjectService
+@inject IClientService ClientService
+@inject IEmployeeService EmployeeService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<EditProject> Logger
+
+<PageTitle>@(project?.Name ?? "프로젝트") 수정 - 프로젝트 관리</PageTitle>
+
+<div class="container-fluid">
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (project == null)
+    {
+        <!-- 프로젝트를 찾을 수 없음 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-project-diagram fa-4x text-muted mb-4"></i>
+                    <h3>프로젝트를 찾을 수 없습니다</h3>
+                    <p class="text-muted">요청하신 프로젝트가 존재하지 않거나 삭제되었습니다.</p>
+                    <button class="btn btn-primary" @onclick="NavigateToList">
+                        <i class="fas fa-arrow-left me-2"></i>프로젝트 목록으로
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- 📊 Header Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="fas fa-edit me-2"></i>@project.Name 수정
+                        </h2>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/projects" class="text-decoration-none">프로젝트 관리</a>
+                                </li>
+                                <li class="breadcrumb-item">
+                                    <a href="/projects/@ProjectId" class="text-decoration-none">@project.Name</a>
+                                </li>
+                                <li class="breadcrumb-item active">수정</li>
+                            </ol>
+                        </nav>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary me-2" @onclick="NavigateToDetail">
+                            <i class="fas fa-arrow-left me-2"></i>돌아가기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <EditForm Model="updateRequest" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+
+            <div class="row">
+                <!-- 📝 Main Form -->
+                <div class="col-lg-8">
+                    <!-- 기본 정보 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle me-2"></i>기본 정보 수정
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <!-- 프로젝트명 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">프로젝트명</label>
+                                    <InputText @bind-Value="updateRequest.Name"
+                                               class="form-control"
+                                               placeholder="웹사이트 리뉴얼 프로젝트" />
+                                    <ValidationMessage For="@(() => updateRequest.Name)" class="text-danger" />
+                                    @if (updateRequest.Name != project.Name)
+                                    {
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            프로젝트명이 변경됩니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 프로젝트 코드 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">프로젝트 코드</label>
+                                    <InputText @bind-Value="updateRequest.ProjectCode"
+                                               class="form-control"
+                                               placeholder="WEB-2024-001" />
+                                    <ValidationMessage For="@(() => updateRequest.ProjectCode)" class="text-danger" />
+                                    @if (updateRequest.ProjectCode != project.ProjectCode)
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            프로젝트 코드 변경은 신중히 결정하세요.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 클라이언트 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">클라이언트</label>
+                                    <InputSelect @bind-Value="updateRequest.ClientId" class="form-select">
+                                        <option value="@Guid.Empty">클라이언트 선택</option>
+                                        @foreach (var client in clients)
+                                        {
+                                            <option value="@client.Id">@client.CompanyName</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.ClientId)" class="text-danger" />
+                                    @if (updateRequest.ClientId != GetOriginalClientId())
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            클라이언트 변경은 계약에 영향을 줄 수 있습니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 프로젝트 매니저 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">프로젝트 매니저</label>
+                                    <InputSelect @bind-Value="updateRequest.ManagerId" class="form-select">
+                                        <option value="@Guid.Empty">매니저 선택</option>
+                                        @foreach (var manager in managers)
+                                        {
+                                            <option value="@manager.Id">@manager.Name (@manager.DepartmentName)</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.ManagerId)" class="text-danger" />
+                                    @if (updateRequest.ManagerId != GetOriginalManagerId())
+                                    {
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            프로젝트 매니저가 변경됩니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 프로젝트 유형 -->
+                                <div class="col-md-4">
+                                    <label class="form-label">프로젝트 유형</label>
+                                    <InputSelect @bind-Value="updateRequest.ProjectType" class="form-select">
+                                        <option value="@ProjectType.Fixed">고정가</option>
+                                        <option value="@ProjectType.TimeAndMaterial">시간당</option>
+                                        <option value="@ProjectType.Retainer">유지보수</option>
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.ProjectType)" class="text-danger" />
+                                </div>
+
+                                <!-- 위험도 -->
+                                <div class="col-md-4">
+                                    <label class="form-label">위험도</label>
+                                    <InputSelect @bind-Value="updateRequest.RiskLevel" class="form-select">
+                                        <option value="@RiskLevel.Low">낮음</option>
+                                        <option value="@RiskLevel.Medium">보통</option>
+                                        <option value="@RiskLevel.High">높음</option>
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.RiskLevel)" class="text-danger" />
+                                </div>
+
+                                <!-- 상태 -->
+                                <div class="col-md-4">
+                                    <label class="form-label">상태</label>
+                                    <InputSelect @bind-Value="updateRequest.Status" class="form-select">
+                                        <option value="@ProjectStatus.Planning">기획</option>
+                                        <option value="@ProjectStatus.Active">진행중</option>
+                                        <option value="@ProjectStatus.OnHold">보류</option>
+                                        <option value="@ProjectStatus.Completed">완료</option>
+                                        <option value="@ProjectStatus.Cancelled">취소</option>
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.Status)" class="text-danger" />
+                                    @if (updateRequest.Status != project.Status)
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            상태 변경은 팀에게 알림이 전송됩니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 시작일 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">시작일</label>
+                                    <InputDate @bind-Value="updateRequest.StartDate"
+                                               class="form-control" />
+                                    <ValidationMessage For="@(() => updateRequest.StartDate)" class="text-danger" />
+                                    @if (updateRequest.StartDate != project.StartDate)
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            시작일 변경은 일정에 영향을 줍니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 종료일 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">종료일 (예정)</label>
+                                    <InputDate @bind-Value="updateRequest.EndDate"
+                                               class="form-control" />
+                                    <ValidationMessage For="@(() => updateRequest.EndDate)" class="text-danger" />
+                                    @if (updateRequest.EndDate != project.EndDate)
+                                    {
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            종료일이 변경됩니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 예산 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">예산 (만원)</label>
+                                    <InputNumber @bind-Value="updateRequest.Budget"
+                                                 class="form-control"
+                                                 placeholder="5000" />
+                                    <ValidationMessage For="@(() => updateRequest.Budget)" class="text-danger" />
+                                    @if (updateRequest.Budget != project.Budget)
+                                    {
+                                        var difference = updateRequest.Budget - project.Budget;
+                                        <small class="@(difference > 0 ? "text-success" : "text-danger")">
+                                            <i class="fas fa-@(difference > 0 ? "arrow-up" : "arrow-down") me-1"></i>
+                                            @(difference > 0 ? "+" : "")@difference.ToString("N0")만원 변경
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 수익률 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">목표 수익률 (%)</label>
+                                    <InputNumber @bind-Value="updateRequest.ProfitMargin"
+                                                 class="form-control"
+                                                 placeholder="20.0" />
+                                    <ValidationMessage For="@(() => updateRequest.ProfitMargin)" class="text-danger" />
+                                    @if (updateRequest.ProfitMargin != project.ProfitMargin)
+                                    {
+                                        var difference = updateRequest.ProfitMargin - project.ProfitMargin;
+                                        <small class="@(difference > 0 ? "text-success" : "text-danger")">
+                                            <i class="fas fa-@(difference > 0 ? "arrow-up" : "arrow-down") me-1"></i>
+                                            @(difference > 0 ? "+" : "")@difference.ToString("F1")% 변경
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 설명 -->
+                                <div class="col-12">
+                                    <label class="form-label">프로젝트 설명</label>
+                                    <InputTextArea @bind-Value="updateRequest.Description"
+                                                   class="form-control"
+                                                   rows="3"
+                                                   placeholder="프로젝트의 목적, 범위, 주요 기능 등을 설명하세요..." />
+                                    <ValidationMessage For="@(() => updateRequest.Description)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 기술 스택 -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-code me-2"></i>기술 스택 수정
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddTechnology">
+                                <i class="fas fa-plus me-1"></i>기술 추가
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            @if (updateRequest.Technologies.Any())
+                            {
+                                <div class="row g-3">
+                                    @for (int i = 0; i < updateRequest.Technologies.Count; i++)
+                                    {
+                                        var index = i;
+                                        var tech = updateRequest.Technologies[index];
+                                        var isNew = !originalTechnologies.Contains(tech);
+
+                                        <div class="col-md-4">
+                                            <div class="border rounded p-3 position-relative @(isNew ? "border-success" : "")">
+                                                @if (isNew)
+                                                {
+                                                    <span class="badge bg-success position-absolute top-0 start-0 m-1">신규</span>
+                                                }
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
+                                                        @onclick="() => RemoveTechnology(index)">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+
+                                                <div style="margin-top: @(isNew ? "25px" : "0px");">
+                                                    <label class="form-label">기술명</label>
+                                                    <InputText @bind-Value="updateRequest.Technologies[index]"
+                                                               class="form-control"
+                                                               placeholder="React, .NET Core 등" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4 text-muted">
+                                    <i class="fas fa-code fa-2x mb-2"></i>
+                                    <p>사용할 기술 스택을 추가해보세요.</p>
+                                    <button type="button" class="btn btn-outline-primary" @onclick="AddTechnology">
+                                        <i class="fas fa-plus me-2"></i>기술 추가
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- 변경 내역 요약 -->
+                    @if (HasChanges())
+                    {
+                        <div class="card mt-4">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0 text-dark">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>변경 내역 확인
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-3">다음 정보가 변경됩니다:</p>
+                                <div class="row g-3">
+                                    @foreach (var change in GetChanges())
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="border-start border-warning ps-3">
+                                                <strong>@change.Field</strong><br>
+                                                <span class="text-muted">@change.OldValue</span><br>
+                                                <span class="text-primary">→ @change.NewValue</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- 📊 Info Panel -->
+                <div class="col-lg-4">
+                    <div class="card position-sticky" style="top: 20px;">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle me-2"></i>수정 정보
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- 현재 프로젝트 정보 -->
+                            <div class="mb-4">
+                                <h6 class="text-primary">현재 정보</h6>
+                                <div class="bg-light p-3 rounded">
+                                    <div class="fw-semibold mb-2">@project.Name</div>
+                                    <div class="row g-2 small">
+                                        <div class="col-6">코드: @project.ProjectCode</div>
+                                        <div class="col-6">상태: @GetStatusText(project.Status)</div>
+                                        <div class="col-6">예산: @project.Budget.ToString("N0")만원</div>
+                                        <div class="col-6">수익률: @project.ProfitMargin.ToString("F1")%</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 선택된 클라이언트 정보 -->
+                            @if (selectedClient != null)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-success">선택된 클라이언트</h6>
+                                    <div class="bg-light p-3 rounded">
+                                        <div><strong>@selectedClient.CompanyName</strong></div>
+                                        <small class="text-muted">업종: @selectedClient.Industry</small><br>
+                                        <small class="text-muted">규모: @selectedClient.SizeCategory</small>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 예산 변경 분석 -->
+                            @if (updateRequest.Budget != project.Budget)
+                            {
+                                <div class="mb-4">
+                                    <h6 class="text-warning">예산 변경 분석</h6>
+                                    <div class="bg-light p-3 rounded">
+                                        <div class="d-flex justify-content-between">
+                                            <span>기존 예산:</span>
+                                            <span>@project.Budget.ToString("N0")만원</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span>변경 예산:</span>
+                                            <span>@updateRequest.Budget.ToString("N0")만원</span>
+                                        </div>
+                                        <hr>
+                                        <div class="d-flex justify-content-between fw-bold">
+                                            <span>차이:</span>
+                                            <span class="@((updateRequest.Budget - project.Budget) > 0 ? "text-success" : "text-danger")">
+                                                @((updateRequest.Budget - project.Budget) > 0 ? "+" : "")@((updateRequest.Budget - project.Budget).ToString("N0"))만원
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 수정 시 주의사항 -->
+                            <div class="mb-4">
+                                <h6 class="text-danger">수정 시 주의사항</h6>
+                                <ul class="list-unstyled small text-muted">
+                                    <li><i class="fas fa-check text-success me-2"></i>클라이언트 변경 시 계약 재검토 필요</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>상태 변경 시 팀원에게 자동 알림</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>예산 변경 시 승인 프로세스 필요</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>일정 변경 시 마일스톤 재조정</li>
+                                </ul>
+                            </div>
+
+                            <!-- 저장 버튼 -->
+                            <div class="d-grid gap-2">
+                                <button type="submit"
+                                        class="btn btn-success"
+                                        disabled="@(isSubmitting || !HasChanges())">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                        <span>저장 중...</span>
+                                    }
+                                    else if (!HasChanges())
+                                    {
+                                        <i class="fas fa-check me-2"></i>
+                                        <span>변경사항 없음</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-save me-2"></i>
+                                        <span>변경사항 저장</span>
+                                    }
+                                </button>
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        @onclick="NavigateToDetail"
+                                        disabled="@isSubmitting">
+                                    <i class="fas fa-times me-2"></i>취소
+                                </button>
+                                @if (HasChanges())
+                                {
+                                    <button type="button"
+                                            class="btn btn-outline-warning btn-sm"
+                                            @onclick="ResetChanges"
+                                            disabled="@isSubmitting">
+                                        <i class="fas fa-undo me-2"></i>변경사항 되돌리기
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+    }
+</div>
+
+<style>
+    .required::after {
+        content: " *";
+        color: red;
+    }
+
+    .position-sticky {
+        position: -webkit-sticky;
+        position: sticky;
+    }
+</style>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    // 📊 Data Properties
+    private ProjectDto? project;
+    private UpdateProjectRequest updateRequest = new();
+    private List<ClientDto> clients = new();
+    private List<EmployeeDto> managers = new();
+
+    // 🔄 State Properties
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+
+    // 📋 Original Data for Change Detection
+    private List<string> originalTechnologies = new();
+
+    // 💡 Computed Properties
+    private ClientDto? selectedClient =>
+        updateRequest.ClientId != Guid.Empty ?
+        clients.FirstOrDefault(c => c.Id == updateRequest.ClientId) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 프로젝트 정보 먼저 로드
+            project = await ProjectService.GetProjectByIdAsync(ProjectId);
+
+            if (project != null)
+            {
+                // 프로젝트 정보를 기반으로 수정 요청 초기화
+                InitializeUpdateRequest();
+
+                // 나머지 데이터 병렬 로드
+                var tasks = new[]
+                {
+                    LoadClients(),
+                    LoadManagers()
+                };
+
+                await Task.WhenAll(tasks);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void InitializeUpdateRequest()
+    {
+        if (project == null) return;
+
+        updateRequest = new UpdateProjectRequest
+        {
+            ProjectCode = project.ProjectCode,
+            Name = project.Name,
+            Description = project.Description ?? "",
+            ClientId = project.ClientId,
+            ProjectType = project.ProjectType,
+            StartDate = project.StartDate,
+            EndDate = project.EndDate,
+            Budget = project.Budget,
+            ProfitMargin = project.ProfitMargin,
+            RiskLevel = project.RiskLevel,
+            Status = project.Status,
+            ManagerId = project.ManagerId,
+            Technologies = project.Technologies?.ToList() ?? new List<string>()
+        };
+
+        // 원본 기술 스택 저장 (변경 감지용)
+        originalTechnologies = new List<string>(updateRequest.Technologies);
+    }
+
+    private async Task LoadClients()
+    {
+        var response = await ClientService.GetClientsAsync(1, 1000);
+        if (response.Success && response.Data != null)
+        {
+            clients = response.Data.Items;
+        }
+    }
+
+    private async Task LoadManagers()
+    {
+        var employees = await EmployeeService.GetActiveEmployeesAsync();
+        // 매니저급 직원만 필터링
+        managers = employees.Where(e => e.PositionTitle?.Contains("매니저") == true ||
+                                       e.PositionTitle?.Contains("팀장") == true ||
+                                       e.PositionTitle?.Contains("부장") == true ||
+                                       e.PositionTitle?.Contains("이사") == true).ToList();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (isSubmitting || project == null) return;
+
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await ProjectService.UpdateProjectAsync(ProjectId, updateRequest);
+
+            if (result != null)
+            {
+                // 성공 시 프로젝트 상세 페이지로 이동
+                Navigation.NavigateTo($"/projects/{ProjectId}");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "프로젝트 수정에 실패했습니다. 다시 시도해주세요.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 수정 중 오류 발생");
+            await JSRuntime.InvokeVoidAsync("alert", "프로젝트 수정 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    // 🔧 Technologies Management
+    private void AddTechnology()
+    {
+        updateRequest.Technologies.Add("");
+        StateHasChanged();
+    }
+
+    private void RemoveTechnology(int index)
+    {
+        if (index >= 0 && index < updateRequest.Technologies.Count)
+        {
+            updateRequest.Technologies.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    // 🔄 Change Detection Helper Methods
+    private Guid GetOriginalClientId()
+    {
+        return project?.ClientId ?? Guid.Empty;
+    }
+
+    private Guid GetOriginalManagerId()
+    {
+        return project?.ManagerId ?? Guid.Empty;
+    }
+
+    private bool HasChanges()
+    {
+        if (project == null) return false;
+
+        return updateRequest.ProjectCode != project.ProjectCode ||
+               updateRequest.Name != project.Name ||
+               updateRequest.Description != (project.Description ?? "") ||
+               updateRequest.ClientId != GetOriginalClientId() ||
+               updateRequest.ProjectType != project.ProjectType ||
+               updateRequest.StartDate != project.StartDate ||
+               updateRequest.EndDate != project.EndDate ||
+               updateRequest.Budget != project.Budget ||
+               updateRequest.ProfitMargin != project.ProfitMargin ||
+               updateRequest.RiskLevel != project.RiskLevel ||
+               updateRequest.Status != project.Status ||
+               updateRequest.ManagerId != GetOriginalManagerId() ||
+               !updateRequest.Technologies.SequenceEqual(originalTechnologies);
+    }
+
+    private List<ChangeInfo> GetChanges()
+    {
+        var changes = new List<ChangeInfo>();
+        if (project == null) return changes;
+
+        if (updateRequest.ProjectCode != project.ProjectCode)
+            changes.Add(new ChangeInfo("프로젝트 코드", project.ProjectCode, updateRequest.ProjectCode));
+
+        if (updateRequest.Name != project.Name)
+            changes.Add(new ChangeInfo("프로젝트명", project.Name, updateRequest.Name));
+
+        if (updateRequest.Description != (project.Description ?? ""))
+            changes.Add(new ChangeInfo("설명", project.Description ?? "없음", updateRequest.Description.Length > 0 ? "변경됨" : "없음"));
+
+        if (updateRequest.ClientId != GetOriginalClientId())
+        {
+            var oldClient = project.ClientName ?? "미선택";
+            var newClient = updateRequest.ClientId != Guid.Empty ?
+                selectedClient?.CompanyName ?? "알 수 없음" : "미선택";
+            changes.Add(new ChangeInfo("클라이언트", oldClient, newClient));
+        }
+
+        if (updateRequest.ProjectType != project.ProjectType)
+            changes.Add(new ChangeInfo("프로젝트 유형", GetProjectTypeText(project.ProjectType), GetProjectTypeText(updateRequest.ProjectType)));
+
+        if (updateRequest.StartDate != project.StartDate)
+            changes.Add(new ChangeInfo("시작일", project.StartDate.ToString("yyyy-MM-dd"), updateRequest.StartDate.ToString("yyyy-MM-dd")));
+
+        if (updateRequest.EndDate != project.EndDate)
+        {
+            var oldEnd = project.EndDate?.ToString("yyyy-MM-dd") ?? "미설정";
+            var newEnd = updateRequest.EndDate?.ToString("yyyy-MM-dd") ?? "미설정";
+            changes.Add(new ChangeInfo("종료일", oldEnd, newEnd));
+        }
+
+        if (updateRequest.Budget != project.Budget)
+            changes.Add(new ChangeInfo("예산", $"{project.Budget:N0}만원", $"{updateRequest.Budget:N0}만원"));
+
+        if (updateRequest.ProfitMargin != project.ProfitMargin)
+            changes.Add(new ChangeInfo("수익률", $"{project.ProfitMargin:F1}%", $"{updateRequest.ProfitMargin:F1}%"));
+
+        if (updateRequest.RiskLevel != project.RiskLevel)
+            changes.Add(new ChangeInfo("위험도", GetRiskLevelText(project.RiskLevel), GetRiskLevelText(updateRequest.RiskLevel)));
+
+        if (updateRequest.Status != project.Status)
+            changes.Add(new ChangeInfo("상태", GetStatusText(project.Status), GetStatusText(updateRequest.Status)));
+
+        if (updateRequest.ManagerId != GetOriginalManagerId())
+        {
+            var oldManager = project.ManagerName ?? "미선택";
+            var newManager = updateRequest.ManagerId != Guid.Empty ?
+                managers.FirstOrDefault(m => m.Id == updateRequest.ManagerId)?.Name ?? "알 수 없음" : "미선택";
+            changes.Add(new ChangeInfo("프로젝트 매니저", oldManager, newManager));
+        }
+
+        if (!updateRequest.Technologies.SequenceEqual(originalTechnologies))
+        {
+            var oldTech = originalTechnologies.Any() ? string.Join(", ", originalTechnologies) : "없음";
+            var newTech = updateRequest.Technologies.Any() ? string.Join(", ", updateRequest.Technologies) : "없음";
+            changes.Add(new ChangeInfo("기술 스택", oldTech, newTech));
+        }
+
+        return changes;
+    }
+
+    private void ResetChanges()
+    {
+        InitializeUpdateRequest();
+        StateHasChanged();
+    }
+
+    // 🧭 Navigation
+    private void NavigateToList()
+    {
+        Navigation.NavigateTo("/projects");
+    }
+
+    private void NavigateToDetail()
+    {
+        Navigation.NavigateTo($"/projects/{ProjectId}");
+    }
+
+    // 🛠️ Helper Methods
+    private string GetStatusText(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "기획",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetProjectTypeText(ProjectType type)
+    {
+        return type switch
+        {
+            ProjectType.Fixed => "고정가",
+            ProjectType.TimeAndMaterial => "시간당",
+            ProjectType.Retainer => "유지보수",
+            _ => "알 수 없음"
+        };
+    }
+
+    private string GetRiskLevelText(RiskLevel risk)
+    {
+        return risk switch
+        {
+            RiskLevel.Low => "낮음",
+            RiskLevel.Medium => "보통",
+            RiskLevel.High => "높음",
+            _ => "보통"
+        };
+    }
+
+    // 📊 Helper Classes
+    public class ChangeInfo
+    {
+        public string Field { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+
+        public ChangeInfo(string field, string oldValue, string newValue)
+        {
+            Field = field;
+            OldValue = oldValue;
+            NewValue = newValue;
+        }
+    }
+}

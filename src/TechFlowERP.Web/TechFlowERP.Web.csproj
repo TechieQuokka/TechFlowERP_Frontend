@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TechFlowERP.Shared\TechFlowERP.Shared.csproj" />
+    <ProjectReference Include="..\TechFlowERP.Models\TechFlowERP.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Components\Forms\" />
+    <Folder Include="Components\Charts\" />
+    <Folder Include="Extensions\" />
+    <Folder Include="State\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ApexCharts.Blazor" Version="0.9.6-alpha" />
+    <PackageReference Include="Blazored.LocalStorage" Version="4.4.0" />
+    <PackageReference Include="Blazored.Toast" Version="4.2.1" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="Fluxor" Version="6.0.0" />
+    <PackageReference Include="Fluxor.Blazor.Web" Version="6.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+    <PackageReference Include="MudBlazor" Version="7.0.0" />
+    <PackageReference Include="Radzen.Blazor" Version="7.1.2" />
+    <PackageReference Include="System.Net.Http.Json" Version="8.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

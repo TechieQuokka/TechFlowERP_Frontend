@@ -1,0 +1,31 @@
+﻿@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
+@using TechFlowERP.Web
+@using TechFlowERP.Web.Components
+
+@* ✅ Authorization 추가 *@
+@using Microsoft.AspNetCore.Authorization
+
+@* ✅ Layout 네임스페이스 추가 *@
+@using TechFlowERP.Web.Components.Layout
+
+@* 🆕 추가된 라이브러리들 *@
+@using MudBlazor
+@using Blazored.Toast.Services
+@using Fluxor
+@using ApexCharts
+
+@* 🆕 프로젝트 참조들 *@
+@using TechFlowERP.Shared.Components
+@using TechFlowERP.Models.DTOs
+@using TechFlowERP.Models.Requests
+@using TechFlowERP.Models.Responses
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Web.Models.ViewModels

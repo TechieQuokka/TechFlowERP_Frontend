@@ -1,0 +1,228 @@
+﻿@using MudBlazor
+@using TechFlowERP.Web.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject CustomAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+
+<MudThemeProvider Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    @* 🎨 상단 앱바 *@
+    <MudAppBar Elevation="1" Color="Color.Primary" Fixed="true">
+        <MudIconButton Icon="Icons.Material.Filled.Menu" 
+                       Color="Color.Inherit" 
+                       Edge="Edge.Start" 
+                       OnClick="@ToggleDrawer" />
+        
+        <MudText Typo="Typo.h6" Class="ml-3">TechFlowERP</MudText>
+        
+        <MudSpacer />
+        
+        @* 🔔 알림 버튼 *@
+        <MudIconButton Icon="Icons.Material.Filled.Notifications" 
+                       Color="Color.Inherit" />
+        
+        @* 👤 사용자 메뉴 (업데이트됨) *@
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu Icon="Icons.Material.Filled.AccountCircle" 
+                         Color="Color.Inherit" 
+                         Direction="Origin.BottomLeft"
+                         OffsetX="true"
+                         Class="ml-2">
+                    @* 🏷️ 사용자 정보 헤더 *@
+                    <div class="pa-4 border-bottom">
+                        <MudText Typo="Typo.subtitle1">@_currentUser?.Name</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@_currentUser?.Email</MudText>
+                        @* ✅ 수정된 MudChip *@
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="GetRoleColor(_currentUser?.Role.ToString())"
+                                 Class="mt-1">
+                            @_currentUser?.Role
+                        </MudChip>
+                    </div>
+                    
+                    @* 📋 메뉴 항목들 *@
+                    <MudMenuItem Icon="Icons.Material.Filled.Person" 
+                                 OnClick="@(() => Navigation.NavigateTo("/profile"))">
+                        내 프로필
+                    </MudMenuItem>
+                    <MudMenuItem Icon="Icons.Material.Filled.Settings" 
+                                 OnClick="@(() => Navigation.NavigateTo("/settings"))">
+                        설정
+                    </MudMenuItem>
+                    <MudMenuItem Icon="Icons.Material.Filled.Help" 
+                                 OnClick="@(() => Navigation.NavigateTo("/help"))">
+                        도움말
+                    </MudMenuItem>
+                    
+                    <MudDivider Class="my-2" />
+                    
+                    @* 🚪 로그아웃 버튼 *@
+                    <MudMenuItem Icon="Icons.Material.Filled.Logout" 
+                                 IconColor="Color.Error"
+                                 OnClick="@HandleLogout">
+                        <MudText Color="Color.Error">로그아웃</MudText>
+                    </MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Inherit"
+                           Href="/login">
+                    로그인
+                </MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    @* 📱 사이드 네비게이션 *@
+    <MudDrawer @bind-Open="_drawerOpen" 
+               ClipMode="DrawerClipMode.Always" 
+               Elevation="2"
+               Variant="@DrawerVariant.Mini"
+               OpenMiniOnHover="true">
+        
+        <NavMenu />
+        
+    </MudDrawer>
+
+    @* 📄 메인 콘텐츠 *@
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private TechFlowERP.Models.DTOs.Auth.UserInfoDto? _currentUser;
+    
+    @* 🎨 커스텀 테마 설정 *@
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#1976d2",
+            Secondary = "#424242",
+            AppbarBackground = "#1976d2",
+            Background = "#f5f5f5",
+            Surface = "#ffffff",
+            DrawerBackground = "#ffffff",
+            DrawerText = "rgba(0,0,0, 0.87)",
+            Success = "#4caf50",
+            Warning = "#ff9800",
+            Error = "#f44336",
+            Info = "#2196f3"
+        },
+        LayoutProperties = new LayoutProperties()
+        {
+            DrawerWidthLeft = "240px",
+            DrawerWidthRight = "300px"
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 현재 사용자 정보 로드
+        await LoadCurrentUser();
+        
+        // 인증 상태 변경 감지
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    /// <summary>
+    /// 현재 사용자 정보 로드
+    /// </summary>
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            _currentUser = await AuthStateProvider.GetCurrentUserAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"사용자 정보 로드 오류: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 인증 상태 변경 이벤트 핸들러
+    /// </summary>
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        await LoadCurrentUser();
+    }
+
+    /// <summary>
+    /// 사이드바 토글
+    /// </summary>
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    /// <summary>
+    /// 로그아웃 처리
+    /// </summary>
+    private async Task HandleLogout()
+    {
+        try
+        {
+            // 로그아웃 요청 생성
+            var logoutRequest = new TechFlowERP.Models.DTOs.Auth.LogoutRequestDto
+            {
+                LogoutFromAllDevices = false
+            };
+
+            // AuthService를 통한 로그아웃은 나중에 구현
+            // var authService = ... // DI로 주입 필요
+            // await authService.LogoutAsync(logoutRequest);
+
+            // 인증 상태 제거
+            await AuthStateProvider.MarkUserAsLoggedOut();
+
+            // 성공 메시지
+            ToastService.ShowSuccess("성공적으로 로그아웃되었습니다.");
+
+            // 로그인 페이지로 리다이렉트
+            Navigation.NavigateTo("/login", true);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("로그아웃 중 오류가 발생했습니다.");
+            Console.WriteLine($"로그아웃 오류: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 역할에 따른 색상 반환
+    /// </summary>
+    private Color GetRoleColor(string? role)
+    {
+        return role switch
+        {
+            "Admin" => Color.Error,
+            "Manager" => Color.Warning,
+            "Finance" => Color.Info,
+            "HR" => Color.Success,
+            _ => Color.Secondary
+        };
+    }
+
+    /// <summary>
+    /// 컴포넌트 정리
+    /// </summary>
+    public void Dispose()
+    {
+        AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+}

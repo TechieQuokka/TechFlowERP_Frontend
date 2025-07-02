@@ -1,0 +1,675 @@
+﻿@page "/"
+@page "/dashboard"
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Client
+@using TechFlowERP.Models.DTOs.TimeEntry
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@using TechFlowERP.Shared.Components.Charts.Dashboard
+@using TechFlowERP.Shared.Models.Charts
+@inject IProjectService ProjectService
+@inject IEmployeeService EmployeeService
+@inject IClientService ClientService
+@inject ITimeEntryService TimeEntryService
+@inject NavigationManager Navigation
+@inject ILogger<Index> Logger
+
+<PageTitle>대시보드 - TechFlow ERP</PageTitle>
+
+<div class="container-fluid">
+    <!-- 📊 Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-tachometer-alt me-2"></i>대시보드
+                    </h2>
+                    <p class="text-muted mb-0">전체 시스템 현황을 한눈에 확인하세요</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <select @bind="selectedPeriod" class="form-select" style="width: auto;">
+                        <option value="week">최근 1주</option>
+                        <option value="month">최근 1개월</option>
+                        <option value="quarter">최근 3개월</option>
+                        <option value="year">최근 1년</option>
+                    </select>
+                    <button class="btn btn-outline-primary" @onclick="RefreshData">
+                        <i class="fas fa-sync me-1"></i>새로고침
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else
+    {
+        <!-- 📊 Key Metrics Cards -->
+        <div class="row mb-4">
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-primary text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">총 프로젝트</h6>
+                                <h3 class="mb-0 fw-bold">@totalProjects</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-play me-1"></i>활성: @@activeProjects개
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-project-diagram fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white bg-opacity-10 border-0">
+                        <a href="/projects" class="text-white text-decoration-none small">
+                            <i class="fas fa-arrow-right me-1"></i>프로젝트 관리로 이동
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-success text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">총 직원</h6>
+                                <h3 class="mb-0 fw-bold">@totalEmployees</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-user-check me-1"></i>활성: @@activeEmployees명
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-users fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white bg-opacity-10 border-0">
+                        <a href="/employees" class="text-white text-decoration-none small">
+                            <i class="fas fa-arrow-right me-1"></i>직원 관리로 이동
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-info text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">이번 달 시간</h6>
+                                <h3 class="mb-0 fw-bold">@monthlyHours.ToString("F0")h</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-dollar-sign me-1"></i>청구: @billableHours.ToString("F0")h
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-clock fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white bg-opacity-10 border-0">
+                        <a href="/timesheet" class="text-white text-decoration-none small">
+                            <i class="fas fa-arrow-right me-1"></i>타임시트로 이동
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-3 col-md-6 mb-3">
+                <div class="card bg-gradient-warning text-white h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-title mb-1 text-white-50">이번 달 매출</h6>
+                                <h3 class="mb-0 fw-bold">@monthlyRevenue.ToString("C0")</h3>
+                                <small class="text-white-75">
+                                    <i class="fas fa-chart-line me-1"></i>전월 대비 @GetRevenueGrowth()
+                                </small>
+                            </div>
+                            <div class="text-white-50">
+                                <i class="fas fa-won-sign fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white bg-opacity-10 border-0">
+                        <a href="/reports" class="text-white text-decoration-none small">
+                            <i class="fas fa-arrow-right me-1"></i>리포트로 이동
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📈 Charts Section -->
+        <div class="row mb-4">
+            <!-- 프로젝트 현황 차트 -->
+            <div class="col-xl-8 col-lg-7 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>프로젝트 현황
+                        </h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary @(chartType == "status" ? "active" : "")"
+                                    @onclick="@(() => SetChartType("status"))">
+                                상태별
+                            </button>
+                            <button class="btn btn-outline-secondary @(chartType == "revenue" ? "active" : "")"
+                                    @onclick="@(() => SetChartType("revenue"))">
+                                매출별
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (chartType == "status")
+                        {
+                            <ProjectStatusChart Data="@projectStatusChartData"
+                                                Title="프로젝트 상태별 현황"
+                                                Height="300" />
+                        }
+                        else
+                        {
+                            <RevenueChart Data="@revenueChartData"
+                                          Title="월별 매출 현황"
+                                          Height="300" />
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- 직원 활용도 차트 -->
+            <div class="col-xl-4 col-lg-5 mb-3">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie me-2"></i>직원 활용도
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <UtilizationChart Data="@utilizationChartData"
+                                          Title="부서별 직원 활용도"
+                                          Height="350"
+                                          MaxEmployees="5" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📋 Recent Activities & Quick Stats -->
+        <div class="row">
+            <!-- 최근 프로젝트 활동 -->
+            <div class="col-xl-6 col-lg-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-history me-2"></i>최근 프로젝트 활동
+                        </h5>
+                        <a href="/projects" class="btn btn-sm btn-outline-primary">전체보기</a>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (recentProjects.Any())
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var project in recentProjects.Take(5))
+                                {
+                                    <div class="list-group-item border-0">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="mb-1">
+                                                    <a href="/projects/@project.Id" class="text-decoration-none">
+                                                        @project.Name
+                                                    </a>
+                                                </h6>
+                                                <p class="mb-1 text-muted small">@project.ClientName</p>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-calendar me-1"></i>
+                                                    @project.UpdatedAt.ToString("MM/dd HH:mm")
+                                                </small>
+                                            </div>
+                                            <span class="badge @GetProjectStatusBadgeClass(project.Status)">
+                                                @GetProjectStatusText(project.Status)
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center py-4">
+                                <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                                <p class="text-muted">최근 활동이 없습니다</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- 승인 대기 항목 -->
+            <div class="col-xl-6 col-lg-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clock me-2"></i>승인 대기 항목
+                        </h5>
+                        <a href="/timeapproval" class="btn btn-sm btn-outline-warning">전체보기</a>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-warning mb-1">@pendingTimeEntries</h4>
+                                    <p class="text-muted small mb-0">시간 기록</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-info mb-1">@pendingHours.ToString("F0")h</h4>
+                                    <p class="text-muted small mb-0">대기 시간</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (recentTimeEntries.Any())
+                        {
+                            <hr class="my-3">
+                            <div class="small">
+                                <strong class="text-muted">최근 제출:</strong>
+                                @foreach (var entry in recentTimeEntries.Take(3))
+                                {
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <span>@entry.EmployeeName</span>
+                                        <span class="badge bg-warning">@entry.Hours.ToString("F1")h</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📊 Quick Actions -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-bolt me-2"></i>빠른 작업
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <a href="/projects/create" class="btn btn-outline-primary w-100 h-100 d-flex flex-column justify-content-center text-decoration-none">
+                                    <i class="fas fa-plus fa-2x mb-2"></i>
+                                    <span>새 프로젝트</span>
+                                </a>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <a href="/employees/create" class="btn btn-outline-success w-100 h-100 d-flex flex-column justify-content-center text-decoration-none">
+                                    <i class="fas fa-user-plus fa-2x mb-2"></i>
+                                    <span>직원 추가</span>
+                                </a>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <a href="/timesheet" class="btn btn-outline-info w-100 h-100 d-flex flex-column justify-content-center text-decoration-none">
+                                    <i class="fas fa-clock fa-2x mb-2"></i>
+                                    <span>시간 입력</span>
+                                </a>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <a href="/clients/create" class="btn btn-outline-warning w-100 h-100 d-flex flex-column justify-content-center text-decoration-none">
+                                    <i class="fas fa-building fa-2x mb-2"></i>
+                                    <span>클라이언트 추가</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // 📊 State Variables
+    private bool isLoading = true;
+    private string chartType = "status";
+
+    private string _selectedPeriod = "month";
+    private string selectedPeriod
+    {
+        get => _selectedPeriod;
+        set
+        {
+            if (_selectedPeriod != value)
+            {
+                _selectedPeriod = value;
+                _ = OnPeriodChanged();
+            }
+        }
+    }
+
+    // 📈 Key Metrics
+    private int totalProjects = 0;
+    private int activeProjects = 0;
+    private int totalEmployees = 0;
+    private int activeEmployees = 0;
+    private decimal monthlyHours = 0;
+    private decimal billableHours = 0;
+    private decimal monthlyRevenue = 0;
+    private decimal previousMonthRevenue = 0;
+    private int pendingTimeEntries = 0;
+    private decimal pendingHours = 0;
+
+    // 📋 Data Lists
+    private List<ProjectDto> recentProjects = new();
+    private List<TimeEntryDto> recentTimeEntries = new();
+
+    // 📊 Chart Data - 기존 차트 컴포넌트용
+    private List<ProjectStatusChartData> projectStatusChartData = new();
+    private List<RevenueChartData> revenueChartData = new();
+    private List<UtilizationChartData> utilizationChartData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 병렬로 데이터 로드
+            var tasks = new[]
+            {
+                LoadProjectMetrics(),
+                LoadEmployeeMetrics(),
+                LoadTimeMetrics(),
+                LoadRecentActivities(),
+                LoadChartData()
+            };
+
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "대시보드 데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProjectMetrics()
+    {
+        try
+        {
+            var projectResponse = await ProjectService.GetProjectsAsync();
+            var projects = projectResponse?.Data?.Items ?? new List<ProjectDto>(); // 기존과 동일하게 Items 사용
+
+            totalProjects = projects.Count;
+            activeProjects = projects.Count(p => p.Status == ProjectStatus.Active);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "프로젝트 메트릭 로드 실패");
+        }
+    }
+
+    private async Task LoadEmployeeMetrics()
+    {
+        try
+        {
+            var employeeResponse = await EmployeeService.GetEmployeesAsync();
+            var employees = employeeResponse?.Data?.Items ?? new List<EmployeeDto>(); // Items 사용
+
+            totalEmployees = employees.Count;
+            activeEmployees = employees.Count(e => e.IsActive);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 메트릭 로드 실패");
+        }
+    }
+
+    private async Task LoadTimeMetrics()
+    {
+        try
+        {
+            var startDate = DateTime.Now.AddDays(-30);
+            var endDate = DateTime.Now;
+
+            var timeResponse = await TimeEntryService.GetTimeEntriesAsync(
+                startDate: startDate,
+                endDate: endDate,
+                pageSize: 1000);
+
+            var timeEntries = timeResponse?.Data?.Items ?? new List<TimeEntryDto>(); // Items 사용
+
+            monthlyHours = timeEntries.Sum(t => t.Hours);
+            billableHours = timeEntries.Where(t => t.Billable).Sum(t => t.Hours);
+
+            // 승인 대기 항목
+            pendingTimeEntries = timeEntries.Count(t => !t.Approved);
+            pendingHours = timeEntries.Where(t => !t.Approved).Sum(t => t.Hours);
+
+            // 최근 시간 기록
+            recentTimeEntries = timeEntries
+                .Where(t => !t.Approved)
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(5)
+                .ToList();
+
+            // 매출 계산 (임시 - 시급 5만원 가정)
+            monthlyRevenue = billableHours * 50000;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "시간 메트릭 로드 실패");
+        }
+    }
+
+    private async Task LoadRecentActivities()
+    {
+        try
+        {
+            var projectResponse = await ProjectService.GetProjectsAsync();
+            var projects = projectResponse?.Data?.Items ?? new List<ProjectDto>(); // Items 사용
+
+            recentProjects = projects
+                .OrderByDescending(p => p.UpdatedAt)
+                .Take(10)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "최근 활동 로드 실패");
+        }
+    }
+
+    private async Task LoadChartData()
+    {
+        try
+        {
+            var projectResponse = await ProjectService.GetProjectsAsync();
+            var projects = projectResponse?.Data?.Items ?? new List<ProjectDto>(); // Items 사용
+
+            // 프로젝트 상태별 데이터 (기존 차트 형식)
+            var statusGroups = projects.GroupBy(p => p.Status).ToList();
+            projectStatusChartData = statusGroups.Select(g => new ProjectStatusChartData
+            {
+                Status = g.Key.ToString(),
+                StatusName = GetProjectStatusText(g.Key),
+                Count = g.Count(),
+                Percentage = (double)g.Count() / projects.Count * 100,
+                Color = GetProjectStatusColor(g.Key)
+            }).ToList();
+
+            // 매출 데이터 (기존 차트 형식) - 샘플 데이터
+            var baseDate = DateTime.Now.AddMonths(-11);
+            revenueChartData = new List<RevenueChartData>();
+            for (int i = 0; i < 12; i++)
+            {
+                var date = baseDate.AddMonths(i);
+                var amount = 15000000 + (i * 2000000) + (decimal)(new Random().NextDouble() * 5000000);
+
+                revenueChartData.Add(new RevenueChartData
+                {
+                    Date = date,
+                    Amount = Math.Round(amount, 0),
+                    Period = date.ToString("MM월"),
+                    Category = "Revenue"
+                });
+            }
+
+            // 직원 활용도 데이터 (기존 차트 형식) - 샘플 데이터
+            var employees = new[] { "김개발", "이프론트", "박백엔드", "최디자인", "정기획" };
+            var departments = new[] { "개발팀", "디자인팀", "기획팀" };
+            var random = new Random();
+
+            utilizationChartData = employees.Select(emp => new UtilizationChartData
+            {
+                EmployeeName = emp,
+                EmployeeId = Guid.NewGuid().ToString(),
+                BillableHours = Math.Round(120 + random.NextDouble() * 60, 1),
+                NonBillableHours = Math.Round(20 + random.NextDouble() * 40, 1),
+                Department = departments[random.Next(departments.Length)]
+            }).ToList();
+
+            // TotalHours와 UtilizationRate 계산
+            foreach (var item in utilizationChartData)
+            {
+                item.TotalHours = item.BillableHours + item.NonBillableHours;
+                item.UtilizationRate = Math.Round((item.BillableHours / item.TotalHours) * 100, 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "차트 데이터 로드 실패");
+        }
+    }
+
+    private string GetProjectStatusColor(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "#6c757d",
+            ProjectStatus.Active => "#198754",
+            ProjectStatus.OnHold => "#ffc107",
+            ProjectStatus.Completed => "#0d6efd",
+            ProjectStatus.Cancelled => "#dc3545",
+            _ => "#6c757d"
+        };
+    }
+
+    private async Task OnPeriodChanged()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadDashboardData();
+    }
+
+    private void SetChartType(string type)
+    {
+        chartType = type;
+        StateHasChanged();
+    }
+
+    // 🎨 Helper Methods
+    private string GetRevenueGrowth()
+    {
+        if (previousMonthRevenue == 0) return "+0%";
+
+        var growth = ((monthlyRevenue - previousMonthRevenue) / previousMonthRevenue) * 100;
+        var icon = growth >= 0 ? "↗" : "↘";
+        var color = growth >= 0 ? "text-success" : "text-danger";
+
+        return $"<span class=\"{color}\">{icon} {Math.Abs(growth):F1}%</span>";
+    }
+
+    private string GetProjectStatusBadgeClass(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "bg-secondary",
+            ProjectStatus.Active => "bg-success",
+            ProjectStatus.OnHold => "bg-warning",
+            ProjectStatus.Completed => "bg-primary",
+            ProjectStatus.Cancelled => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetProjectStatusText(ProjectStatus status)
+    {
+        return status switch
+        {
+            ProjectStatus.Planning => "계획중",
+            ProjectStatus.Active => "진행중",
+            ProjectStatus.OnHold => "보류",
+            ProjectStatus.Completed => "완료",
+            ProjectStatus.Cancelled => "취소",
+            _ => "알 수 없음"
+        };
+    }
+}
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .bg-gradient-success {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+
+    .bg-gradient-info {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+
+    .bg-gradient-warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    .text-white-50 {
+        color: rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .text-white-75 {
+        color: rgba(255, 255, 255, 0.75) !important;
+    }
+
+    .card {
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        border: none;
+    }
+
+    .list-group-item {
+        border-left: 3px solid transparent;
+        transition: all 0.2s;
+    }
+
+        .list-group-item:hover {
+            border-left-color: #007bff;
+            background-color: #f8f9fa;
+        }
+</style>

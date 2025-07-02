@@ -1,0 +1,172 @@
+﻿@using Radzen
+@using Radzen.Blazor
+@using TechFlowERP.Shared.Models.Charts
+@using TechFlowERP.Shared.Components.Charts.Base
+@inherits TechFlowERP.Shared.Components.BaseComponent
+
+<BaseChart Title="@Title"
+           Height="@Height"
+           Width="@Width"
+           IsLoading="@LoadingState.IsLoading"
+           HasError="@LoadingState.HasError"
+           HasNoData="@LoadingState.HasNoData"
+           ErrorMessage="@LoadingState.ErrorMessage"
+           OnRetry="@OnRetryAsync"
+           ShowFooter="true"
+           FooterText="@($"마지막 업데이트: {LoadingState.LastLoadTime:HH:mm}")">
+
+    <RadzenChart style="@ChartStyle">
+        <RadzenPieSeries Data="@ChartData"
+                         CategoryProperty="StatusName"
+                         ValueProperty="Count"
+                         Title="프로젝트 수"
+                         Fills="@GetColors()">
+            @if (ShowDataLabels)
+            {
+                <RadzenSeriesDataLabels Visible="true" />
+            }
+        </RadzenPieSeries>
+        <RadzenLegend Position="LegendPosition.Bottom" />
+    </RadzenChart>
+
+
+</BaseChart>
+
+@code {
+    [Parameter] public string Title { get; set; } = "프로젝트 현황";
+    [Parameter] public int Height { get; set; } = ChartOptions.ProjectStatusPie.Height;
+    [Parameter] public int Width { get; set; } = ChartOptions.ProjectStatusPie.Width;
+    [Parameter] public bool ShowDataLabels { get; set; } = true;
+    [Parameter] public List<ProjectStatusChartData> Data { get; set; } = new();
+    [Parameter] public EventCallback OnDataRequested { get; set; }
+
+    private ChartLoadingState LoadingState { get; set; } = new();
+    private List<ProjectStatusChartData> ChartData { get; set; } = new();
+    private string ChartStyle => $"width: 100%; height: {Height - 50}px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Data.Any())
+        {
+            ChartData = Data;
+            LoadingState.HasNoData = false;
+        }
+        else
+        {
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            LoadingState.IsLoading = true;
+            LoadingState.HasError = false;
+            LoadingState.HasNoData = false;
+
+            if (OnDataRequested.HasDelegate)
+            {
+                await OnDataRequested.InvokeAsync();
+            }
+            else if (!Data.Any())
+            {
+                // 샘플 데이터 (실제로는 API에서 가져옴)
+                ChartData = GetSampleData();
+            }
+            else
+            {
+                ChartData = Data;
+            }
+
+            LoadingState.HasNoData = !ChartData.Any();
+            LoadingState.LastLoadTime = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            LoadingState.HasError = true;
+            LoadingState.ErrorMessage = $"데이터 로딩 실패: {ex.Message}";
+        }
+        finally
+        {
+            LoadingState.IsLoading = false;
+        }
+    }
+
+    private async Task OnRetryAsync()
+    {
+        LoadingState.RetryCount++;
+        await LoadDataAsync();
+    }
+
+    private string[] GetColors()
+    {
+        if (!ChartData.Any()) return Array.Empty<string>();
+
+        return ChartData.Select(d =>
+            ChartColors.ProjectStatus.GetValueOrDefault(d.Status, ChartColors.Primary[0])
+        ).ToArray();
+    }
+
+    private List<ProjectStatusChartData> GetSampleData()
+    {
+        return new List<ProjectStatusChartData>
+        {
+            new()
+            {
+                Status = "Active",
+                StatusName = "진행중",
+                Count = 8,
+                Percentage = 40.0,
+                Color = ChartColors.ProjectStatus["Active"]
+            },
+            new()
+            {
+                Status = "Planning",
+                StatusName = "계획중",
+                Count = 5,
+                Percentage = 25.0,
+                Color = ChartColors.ProjectStatus["Planning"]
+            },
+            new()
+            {
+                Status = "Completed",
+                StatusName = "완료",
+                Count = 4,
+                Percentage = 20.0,
+                Color = ChartColors.ProjectStatus["Completed"]
+            },
+            new()
+            {
+                Status = "OnHold",
+                StatusName = "보류",
+                Count = 2,
+                Percentage = 10.0,
+                Color = ChartColors.ProjectStatus["OnHold"]
+            },
+            new()
+            {
+                Status = "Cancelled",
+                StatusName = "취소",
+                Count = 1,
+                Percentage = 5.0,
+                Color = ChartColors.ProjectStatus["Cancelled"]
+            }
+        };
+    }
+
+    // 외부에서 데이터 갱신할 때 사용
+    public async Task RefreshAsync()
+    {
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    // 특정 상태 클릭 시 이벤트 (나중에 추가 가능)
+    [Parameter] public EventCallback<ProjectStatusChartData> OnStatusClicked { get; set; }
+}

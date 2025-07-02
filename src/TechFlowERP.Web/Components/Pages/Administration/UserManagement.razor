@@ -1,0 +1,499 @@
+﻿@page "/administration/users"
+@using TechFlowERP.Models.DTOs.User
+@using TechFlowERP.Models.Enums
+@using TechFlowERP.Models.Requests.User
+@using TechFlowERP.Web.Services.Interfaces
+@inject IUserManagementService UserService
+@inject IJSRuntime JSRuntime
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+<PageTitle>사용자 관리</PageTitle>
+
+<div class="container-fluid">
+    <!-- 페이지 헤더 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">사용자 관리</h1>
+                    <p class="text-muted">시스템 사용자 계정을 관리합니다.</p>
+                </div>
+                <button class="btn btn-primary" @onclick="ShowCreateUserModal">
+                    <i class="fas fa-plus me-2"></i>새 사용자 추가
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 통계 카드 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">전체 사용자</h6>
+                            <h2 class="mb-0">@_statistics.GetValueOrDefault("Total", 0)</h2>
+                        </div>
+                        <i class="fas fa-users fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">활성 사용자</h6>
+                            <h2 class="mb-0">@(_statistics.GetValueOrDefault("Total", 0) - _statistics.GetValueOrDefault("Locked", 0))</h2>
+                        </div>
+                        <i class="fas fa-user-check fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">잠긴 계정</h6>
+                            <h2 class="mb-0">@_statistics.GetValueOrDefault("Locked", 0)</h2>
+                        </div>
+                        <i class="fas fa-user-lock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">관리자</h6>
+                            <h2 class="mb-0">@_statistics.GetValueOrDefault("Admin", 0)</h2>
+                        </div>
+                        <i class="fas fa-user-shield fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 검색 및 필터 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">검색</label>
+                    <input type="text" class="form-control" placeholder="사용자명, 이메일, 이름으로 검색..."
+                           @bind="_searchRequest.SearchTerm" @onkeypress="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">역할</label>
+                    <select class="form-select" @bind="_searchRequest.Role">
+                        <option value="">전체</option>
+                        @foreach (var role in Enum.GetValues<UserRole>())
+                        {
+                            <option value="@role">@GetRoleDisplayName(role)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">상태</label>
+                    <select class="form-select" @bind="_searchRequest.IsLocked">
+                        <option value="">전체</option>
+                        <option value="false">활성</option>
+                        <option value="true">잠김</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">부서</label>
+                    <select class="form-select" @bind="_searchRequest.Department">
+                        <option value="">전체</option>
+                        <option value="IT">IT</option>
+                        <option value="개발팀">개발팀</option>
+                        <option value="디자인팀">디자인팀</option>
+                        <option value="영업팀">영업팀</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" @onclick="SearchUsers">
+                            <i class="fas fa-search"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="ResetSearch">
+                            <i class="fas fa-undo"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사용자 목록 테이블 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">사용자 목록</h5>
+        </div>
+        <div class="card-body p-0">
+            @if (_isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">로딩 중...</span>
+                    </div>
+                    <p class="mt-2 text-muted">사용자 목록을 불러오는 중입니다...</p>
+                </div>
+            }
+            else if (_users?.Items?.Any() == true)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>사용자명</th>
+                                <th>이메일</th>
+                                <th>직원명</th>
+                                <th>부서</th>
+                                <th>역할</th>
+                                <th>상태</th>
+                                <th>최근 로그인</th>
+                                <th>생성일</th>
+                                <th class="text-end">작업</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in _users.Items)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@user.Username</strong>
+                                    </td>
+                                    <td>@user.Email</td>
+                                    <td>@(user.EmployeeName ?? "-")</td>
+                                    <td>@(user.Department ?? "-")</td>
+                                    <td>
+                                        <span class="badge @GetRoleBadgeClass(user.Role)">
+                                            @user.RoleDisplayName
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="@user.StatusBadgeClass">
+                                            @user.StatusText
+                                        </span>
+                                    </td>
+                                    <td>@(user.LastLogin?.ToString("MM/dd HH:mm") ?? "없음")</td>
+                                    <td>@user.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" @onclick="(() => ViewUserDetail(user.UserId))"
+                                                    title="상세보기">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-outline-warning" @onclick="(() => EditUser(user.UserId))"
+                                                    title="수정">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            @if (user.IsLocked)
+                                            {
+                                                <button class="btn btn-outline-success" @onclick="(() => ToggleUserStatus(user.UserId, false))"
+                                                        title="잠금 해제">
+                                                    <i class="fas fa-unlock"></i>
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-outline-danger" @onclick="(() => ToggleUserStatus(user.UserId, true))"
+                                                        title="잠금">
+                                                    <i class="fas fa-lock"></i>
+                                                </button>
+                                            }
+                                            <button class="btn btn-outline-info" @onclick="(() => ResetPassword(user.UserId))"
+                                                    title="비밀번호 재설정">
+                                                <i class="fas fa-key"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 페이징 -->
+                @if (_users.TotalPages > 1)
+                {
+                    <div class="d-flex justify-content-between align-items-center p-3">
+                        <div class="text-muted">
+                            @((_users.PageNumber - 1) * _users.PageSize + 1) -
+                            @(Math.Min(_users.PageNumber * _users.PageSize, _users.TotalCount)) /
+                            @_users.TotalCount 항목
+                        </div>
+                        <nav>
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item @(_users.HasPreviousPage ? "" : "disabled")">
+                                    <button class="page-link" @onclick="(() => ChangePage(_users.PageNumber - 1))"
+                                            disabled="@(!_users.HasPreviousPage)">
+                                        이전
+                                    </button>
+                                </li>
+
+                                @for (int i = Math.Max(1, _users.PageNumber - 2); i <= Math.Min(_users.TotalPages, _users.PageNumber + 2); i++)
+                                {
+                                    var pageNum = i;
+                                    <li class="page-item @(_users.PageNumber == i ? "active" : "")">
+                                        <button class="page-link" @onclick="(() => ChangePage(pageNum))">
+                                            @i
+                                        </button>
+                                    </li>
+                                }
+
+                                <li class="page-item @(_users.HasNextPage ? "" : "disabled")">
+                                    <button class="page-link" @onclick="(() => ChangePage(_users.PageNumber + 1))"
+                                            disabled="@(!_users.HasNextPage)">
+                                        다음
+                                    </button>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">사용자가 없습니다</h5>
+                    <p class="text-muted">검색 조건을 변경하거나 새 사용자를 추가해보세요.</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- 사용자 폼 모달 - 인라인 모달로 변경 -->
+<div class="modal fade" id="userFormModal" tabindex="-1" aria-labelledby="userFormModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userFormModalLabel">
+                    @(_isEditMode ? "사용자 수정" : "새 사용자 추가")
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (_isEditMode)
+                {
+                    <p>사용자 수정 폼 (개발 중)</p>
+                }
+                else
+                {
+                    <p>새 사용자 추가 폼 (개발 중)</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SearchUsersRequest _searchRequest = new();
+    private TechFlowERP.Models.Common.PagedResult<UserListDto>? _users;
+    private Dictionary<string, int> _statistics = new();
+    private bool _isLoading = true;
+    private bool _isEditMode = false;
+    private Guid? _editingUserId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        try
+        {
+            // 사용자 목록과 통계를 병렬로 로드
+            var usersTask = UserService.GetUsersAsync(_searchRequest);
+            var statsTask = UserService.GetUserRoleStatisticsAsync();
+
+            await Task.WhenAll(usersTask, statsTask);
+
+            _users = await usersTask;
+            var roleStats = await statsTask;
+
+            // 통계 계산
+            _statistics = new Dictionary<string, int>
+            {
+                ["Total"] = _users?.TotalCount ?? 0,
+                ["Admin"] = roleStats.GetValueOrDefault("Admin", 0),
+                ["Manager"] = roleStats.GetValueOrDefault("Manager", 0),
+                ["Employee"] = roleStats.GetValueOrDefault("Employee", 0),
+                ["Locked"] = _users?.Items?.Count(u => u.IsLocked) ?? 0
+            };
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("console.error", "사용자 데이터 로드 실패", ex.Message);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SearchUsers()
+    {
+        _searchRequest.Page = 1; // 검색 시 첫 페이지로
+        await LoadData();
+    }
+
+    private async Task ResetSearch()
+    {
+        _searchRequest = new SearchUsersRequest();
+        await LoadData();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page < 1 || (_users != null && page > _users.TotalPages))
+            return;
+
+        _searchRequest.Page = page;
+        await LoadData();
+    }
+
+    private async Task ShowCreateUserModal()
+    {
+        _isEditMode = false;
+        _editingUserId = null;
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('userFormModal')).show()");
+    }
+
+    private async Task ViewUserDetail(Guid userId)
+    {
+        // TODO: 상세 페이지로 이동 또는 모달 표시
+        await JSRuntime.InvokeVoidAsync("alert", $"사용자 상세: {userId}");
+    }
+
+    private async Task EditUser(Guid userId)
+    {
+        _isEditMode = true;
+        _editingUserId = userId;
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('userFormModal')).show()");
+    }
+
+    private async Task ToggleUserStatus(Guid userId, bool isLocked)
+    {
+        var action = isLocked ? "잠금" : "잠금 해제";
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"정말로 이 사용자를 {action}하시겠습니까?");
+
+        if (confirmed)
+        {
+            var request = new ToggleUserStatusRequest
+            {
+                UserId = userId,
+                IsLocked = isLocked
+            };
+
+            var success = await UserService.ToggleUserStatusAsync(request);
+
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"사용자 {action}이 완료되었습니다.");
+                await LoadData();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"사용자 {action}에 실패했습니다.");
+            }
+        }
+    }
+
+    private async Task ResetPassword(Guid userId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "정말로 이 사용자의 비밀번호를 재설정하시겠습니까?");
+
+        if (confirmed)
+        {
+            var request = new ResetPasswordRequest
+            {
+                UserId = userId,
+                NewPassword = "TempPassword123!" // 임시 비밀번호
+            };
+
+            var success = await UserService.ResetUserPasswordAsync(request);
+
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "비밀번호가 재설정되었습니다. 임시 비밀번호: TempPassword123!");
+                await LoadData();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "비밀번호 재설정에 실패했습니다.");
+            }
+        }
+    }
+
+    private string GetRoleDisplayName(UserRole role) => role switch
+    {
+        UserRole.Admin => "관리자",
+        UserRole.Manager => "매니저",
+        UserRole.Employee => "직원",
+        UserRole.Finance => "재무",
+        UserRole.HR => "인사",
+        UserRole.ReadOnly => "읽기전용",
+        _ => "알 수 없음"
+    };
+
+    private string GetRoleBadgeClass(UserRole role) => role switch
+    {
+        UserRole.Admin => "bg-danger",
+        UserRole.Manager => "bg-warning text-dark",
+        UserRole.Employee => "bg-primary",
+        UserRole.Finance => "bg-success",
+        UserRole.HR => "bg-info",
+        UserRole.ReadOnly => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+}
+
+<style>
+    .opacity-75 {
+        opacity: 0.75;
+    }
+
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .table th {
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 0.875rem;
+    }
+
+    .table td {
+        vertical-align: middle;
+        font-size: 0.875rem;
+    }
+
+    .badge {
+        font-size: 0.75rem;
+    }
+</style>

@@ -1,0 +1,741 @@
+﻿@page "/timesheet"
+@page "/timesheet/{Year:int}/{Month:int}"
+
+/// <summary>
+/// 시간 입력 폼 모델
+/// </summary>
+public class TimeEntryFormModel
+{
+    public Guid Id { get; set; }
+    
+    [Required(ErrorMessage = "프로젝트를 선택해주세요.")]
+    public Guid ProjectId { get; set; }
+    
+    [Required(ErrorMessage = "작업 시간을 입력해주세요.")]
+    [Range(0.5, 24, ErrorMessage = "작업 시간은 0.5시간 이상 24시간 이하여야 합니다.")]
+    public decimal Hours { get; set; } = 8.0m;
+    
+    public string TaskDescription { get; set; } = string.Empty;
+    
+    [Required(ErrorMessage = "작업 일자를 선택해주세요.")]
+    public DateTime Date { get; set; } = DateTime.Today;
+    
+    public bool Billable { get; set; } = true;
+}/{Month:int}"
+@using TechFlowERP.Models.DTOs.TimeEntry
+@using TechFlowERP.Models.DTOs.Project
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.Requests.TimeEntry
+@using TechFlowERP.Web.Services.Interfaces
+@using System.ComponentModel.DataAnnotations
+@inject ITimeEntryService TimeEntryService
+@inject IProjectService ProjectService
+@inject IEmployeeService EmployeeService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<PageTitle>타임시트</PageTitle>
+
+<div class="container-fluid">
+    <!-- 헤더 영역 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">
+                    <i class="fas fa-calendar-alt me-2"></i>
+                    타임시트 - @GetCurrentPeriodText()
+                </h2>
+                
+                <!-- 월 네비게이션 -->
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-secondary" @onclick="PreviousMonth">
+                        <i class="fas fa-chevron-left"></i> 이전
+                    </button>
+                    <button class="btn btn-outline-primary" @onclick="GoToCurrentMonth">
+                        이번 달
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="NextMonth">
+                        다음 <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩 상태 -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">타임시트 데이터를 불러오는 중...</p>
+        </div>
+    }
+    else
+    {
+        <!-- 요약 정보 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">총 작업 시간</h6>
+                        <h4 class="mb-0">@totalHours.ToString("F1")h</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">청구 가능 시간</h6>
+                        <h4 class="mb-0">@billableHours.ToString("F1")h</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">청구율</h6>
+                        <h4 class="mb-0">@GetBillablePercentage()%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <h6 class="card-title">승인 대기</h6>
+                        <h4 class="mb-0">@pendingApprovalHours.ToString("F1")h</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 캘린더 형태 타임시트 -->
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        @currentDate.ToString("yyyy년 MM월") 타임시트
+                    </h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary @(viewMode == "week" ? "active" : "")" 
+                                @onclick="@(() => SetViewMode("week"))">
+                            주별
+                        </button>
+                        <button class="btn btn-outline-primary @(viewMode == "month" ? "active" : "")" 
+                                @onclick="@(() => SetViewMode("month"))">
+                            월별
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if (viewMode == "month")
+                {
+                    <!-- 월별 뷰 -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered mb-0 timesheet-calendar">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-center" style="width: 14.28%">일</th>
+                                    <th class="text-center" style="width: 14.28%">월</th>
+                                    <th class="text-center" style="width: 14.28%">화</th>
+                                    <th class="text-center" style="width: 14.28%">수</th>
+                                    <th class="text-center" style="width: 14.28%">목</th>
+                                    <th class="text-center" style="width: 14.28%">금</th>
+                                    <th class="text-center" style="width: 14.28%">토</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var week in GetCalendarWeeks())
+                                {
+                                    <tr>
+                                        @foreach (var day in week)
+                                        {
+                                            <td class="timesheet-day @GetDayClass(day)" 
+                                                style="height: 120px; vertical-align: top; cursor: pointer;"
+                                                @onclick="@(() => SelectDay(day))">
+                                                <div class="d-flex justify-content-between align-items-start p-2">
+                                                    <span class="fw-bold @(IsToday(day) ? "text-primary" : "")">
+                                                        @day.Day
+                                                    </span>
+                                                    @if (IsCurrentMonth(day))
+                                                    {
+                                                        <small class="text-muted">
+                                                            @GetDayTotalHours(day).ToString("F1")h
+                                                        </small>
+                                                    }
+                                                </div>
+                                                
+                                                @if (IsCurrentMonth(day))
+                                                {
+                                                    <div class="px-2">
+                                                        @foreach (var entry in GetDayEntries(day))
+                                                        {
+                                                            <div class="small mb-1 p-1 rounded @GetEntryClass(entry)"
+                                                                 style="font-size: 0.75rem;">
+                                                                <div class="d-flex justify-content-between">
+                                                                    <span class="text-truncate me-1" title="@entry.ProjectName">
+                                                                        @(entry.ProjectName?.Length > 10 ? entry.ProjectName.Substring(0, 10) + "..." : entry.ProjectName)
+                                                                    </span>
+                                                                    <span>@entry.Hours.ToString("F1")h</span>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <!-- 주별 뷰는 Part 2에서 구현 -->
+                    <div class="p-4 text-center text-muted">
+                        주별 뷰는 구현 예정입니다.
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- 시간 입력 모달 -->
+@if (showTimeEntryModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-clock me-2"></i>
+                        시간 입력 - @selectedDay?.ToString("yyyy년 MM월 dd일 (dddd)")
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseTimeEntryModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (isSubmittingTimeEntry)
+                    {
+                        <div class="text-center py-3">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">저장 중...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- 기존 시간 기록 목록 -->
+                        @if (selectedDayEntries.Any())
+                        {
+                            <div class="mb-4">
+                                <h6 class="mb-3">기존 시간 기록</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>프로젝트</th>
+                                                <th>시간</th>
+                                                <th>청구</th>
+                                                <th>승인</th>
+                                                <th>작업</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var entry in selectedDayEntries)
+                                            {
+                                                <tr>
+                                                    <td>@entry.ProjectName</td>
+                                                    <td>@entry.Hours.ToString("F1")h</td>
+                                                    <td>
+                                                        <span class="badge @(entry.Billable ? "bg-success" : "bg-secondary")">
+                                                            @(entry.Billable ? "청구가능" : "비청구")
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge @(entry.Approved ? "bg-success" : "bg-warning")">
+                                                            @(entry.Approved ? "승인됨" : "대기중")
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <button class="btn btn-sm btn-outline-primary me-1" 
+                                                                @onclick="@(() => EditTimeEntry(entry))">
+                                                            <i class="fas fa-edit"></i>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger" 
+                                                                @onclick="@(() => DeleteTimeEntry(entry.Id))">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <hr />
+                            </div>
+                        }
+
+                        <!-- 새 시간 기록 입력 폼 -->
+                        <h6 class="mb-3">새 시간 기록 추가</h6>
+                        <EditForm Model="newTimeEntry" OnValidSubmit="SaveTimeEntry">
+                            <DataAnnotationsValidator />
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">프로젝트 <span class="text-danger">*</span></label>
+                                    <InputSelect @bind-Value="newTimeEntry.ProjectId" class="form-select">
+                                        <option value="">프로젝트 선택...</option>
+                                        @foreach (var project in availableProjects)
+                                        {
+                                            <option value="@project.Id">@project.Name</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => newTimeEntry.ProjectId)" />
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">작업 시간 <span class="text-danger">*</span></label>
+                                    <InputNumber @bind-Value="newTimeEntry.Hours" class="form-control" 
+                                               placeholder="8.0" step="0.5" min="0.5" max="24" />
+                                    <ValidationMessage For="@(() => newTimeEntry.Hours)" />
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-check">
+                                        <InputCheckbox @bind-Value="newTimeEntry.Billable" class="form-check-input" id="billableCheck" />
+                                        <label class="form-check-label" for="billableCheck">
+                                            청구 가능 시간
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">작업 일자</label>
+                                    <InputDate @bind-Value="newTimeEntry.Date" class="form-control" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">작업 설명</label>
+                                <InputTextArea @bind-Value="newTimeEntry.TaskDescription" class="form-control" 
+                                             rows="3" placeholder="수행한 작업 내용을 입력하세요..."></InputTextArea>
+                                <ValidationMessage For="@(() => newTimeEntry.TaskDescription)" />
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-secondary" @onclick="CloseTimeEntryModal">
+                                    취소
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i>
+                                    @(isEditingTimeEntry ? "수정" : "저장")
+                                </button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int? Year { get; set; }
+    [Parameter] public int? Month { get; set; }
+
+    private bool isLoading = true;
+    private DateTime currentDate = DateTime.Now;
+    private string viewMode = "month";
+    
+    // 요약 데이터
+    private decimal totalHours = 0;
+    private decimal billableHours = 0;
+    private decimal pendingApprovalHours = 0;
+    
+    // 타임시트 데이터
+    private List<TimeEntryDto> timeEntries = new();
+    private List<ProjectDto> availableProjects = new();
+    private DateTime? selectedDay;
+    
+    // 시간 입력 모달 관련
+    private bool showTimeEntryModal = false;
+    private bool isSubmittingTimeEntry = false;
+    private bool isEditingTimeEntry = false;
+    private List<TimeEntryDto> selectedDayEntries = new();
+    private TimeEntryFormModel newTimeEntry = new();
+
+    /// <summary>
+    /// 시간 입력 폼 모델
+    /// </summary>
+    public class TimeEntryFormModel
+    {
+        public Guid Id { get; set; }
+        
+        [Required(ErrorMessage = "프로젝트를 선택해주세요.")]
+        public Guid ProjectId { get; set; }
+        
+        [Required(ErrorMessage = "작업 시간을 입력해주세요.")]
+        [Range(0.5, 24, ErrorMessage = "작업 시간은 0.5시간 이상 24시간 이하여야 합니다.")]
+        public decimal Hours { get; set; } = 8.0m;
+        
+        public string TaskDescription { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "작업 일자를 선택해주세요.")]
+        public DateTime Date { get; set; } = DateTime.Today;
+        
+        public bool Billable { get; set; } = true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // URL 파라미터로 날짜 설정
+        if (Year.HasValue && Month.HasValue)
+        {
+            try
+            {
+                currentDate = new DateTime(Year.Value, Month.Value, 1);
+            }
+            catch
+            {
+                currentDate = DateTime.Now;
+            }
+        }
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var startDate = new DateTime(currentDate.Year, currentDate.Month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+            
+            // 기존 ITimeEntryService 메서드 사용 (Response 구조 반영)
+            var timeEntryResponse = await TimeEntryService.GetTimeEntriesAsync(
+                pageNumber: 1, 
+                pageSize: 1000, // 월간 데이터 전체 로드
+                startDate: startDate, 
+                endDate: endDate);
+            
+            timeEntries = timeEntryResponse?.Data?.Items ?? new List<TimeEntryDto>();
+            
+            // 프로젝트 목록 로드 (Response 구조 반영)
+            var projectResponse = await ProjectService.GetProjectsAsync();
+            availableProjects = projectResponse?.Data?.Items ?? new List<ProjectDto>();
+            
+            // 요약 데이터 계산
+            CalculateSummary();
+        }
+        catch (Exception ex)
+        {
+            // 에러 처리
+            Console.WriteLine($"Error loading timesheet data: {ex.Message}");
+            // 폴백 데이터 사용
+            UseLocalFallbackData();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CalculateSummary()
+    {
+        totalHours = timeEntries.Sum(e => e.Hours);
+        billableHours = timeEntries.Where(e => e.Billable).Sum(e => e.Hours);
+        pendingApprovalHours = timeEntries.Where(e => !e.Approved).Sum(e => e.Hours);
+    }
+
+    private string GetCurrentPeriodText()
+    {
+        return currentDate.ToString("yyyy년 MM월");
+    }
+
+    private string GetBillablePercentage()
+    {
+        if (totalHours == 0) return "0";
+        return Math.Round((billableHours / totalHours) * 100, 1).ToString("F1");
+    }
+
+    private async Task PreviousMonth()
+    {
+        currentDate = currentDate.AddMonths(-1);
+        Navigation.NavigateTo($"/timesheet/{currentDate.Year}/{currentDate.Month}");
+        await LoadData();
+    }
+
+    private async Task NextMonth()
+    {
+        currentDate = currentDate.AddMonths(1);
+        Navigation.NavigateTo($"/timesheet/{currentDate.Year}/{currentDate.Month}");
+        await LoadData();
+    }
+
+    private async Task GoToCurrentMonth()
+    {
+        currentDate = DateTime.Now;
+        Navigation.NavigateTo("/timesheet");
+        await LoadData();
+    }
+
+    private void SetViewMode(string mode)
+    {
+        viewMode = mode;
+        StateHasChanged();
+    }
+
+    private List<List<DateTime>> GetCalendarWeeks()
+    {
+        var weeks = new List<List<DateTime>>();
+        var firstDayOfMonth = new DateTime(currentDate.Year, currentDate.Month, 1);
+        var lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
+        
+        // 첫 주의 시작일 (일요일)
+        var startDate = firstDayOfMonth.AddDays(-(int)firstDayOfMonth.DayOfWeek);
+        
+        var currentWeekStart = startDate;
+        while (currentWeekStart <= lastDayOfMonth)
+        {
+            var week = new List<DateTime>();
+            for (int i = 0; i < 7; i++)
+            {
+                week.Add(currentWeekStart.AddDays(i));
+            }
+            weeks.Add(week);
+            currentWeekStart = currentWeekStart.AddDays(7);
+            
+            // 마지막 주가 다음 달을 완전히 넘어가면 중단
+            if (currentWeekStart.Month > currentDate.Month && currentWeekStart.Year >= currentDate.Year)
+            {
+                break;
+            }
+        }
+        
+        return weeks;
+    }
+
+    private string GetDayClass(DateTime day)
+    {
+        var classes = new List<string>();
+        
+        if (!IsCurrentMonth(day))
+            classes.Add("text-muted bg-light");
+        else if (IsToday(day))
+            classes.Add("bg-primary bg-opacity-10 border-primary");
+        else if (day.DayOfWeek == DayOfWeek.Saturday || day.DayOfWeek == DayOfWeek.Sunday)
+            classes.Add("bg-secondary bg-opacity-10");
+            
+        if (selectedDay == day)
+            classes.Add("border-warning border-3");
+            
+        return string.Join(" ", classes);
+    }
+
+    private bool IsCurrentMonth(DateTime day) => day.Month == currentDate.Month && day.Year == currentDate.Year;
+    private bool IsToday(DateTime day) => day.Date == DateTime.Today;
+
+    private decimal GetDayTotalHours(DateTime day)
+    {
+        return timeEntries.Where(e => e.Date.Date == day.Date).Sum(e => e.Hours);
+    }
+
+    private List<TimeEntryDto> GetDayEntries(DateTime day)
+    {
+        return timeEntries.Where(e => e.Date.Date == day.Date).ToList();
+    }
+
+    private string GetEntryClass(TimeEntryDto entry)
+    {
+        if (!entry.Approved)
+            return "bg-warning bg-opacity-50 text-dark";
+        else if (entry.Billable)
+            return "bg-success bg-opacity-50 text-white";
+        else
+            return "bg-secondary bg-opacity-50 text-white";
+    }
+
+    private void SelectDay(DateTime day)
+    {
+        if (IsCurrentMonth(day))
+        {
+            selectedDay = day;
+            selectedDayEntries = GetDayEntries(day);
+            
+            // 새 시간 기록 폼 초기화
+            newTimeEntry = new TimeEntryFormModel
+            {
+                Date = day,
+                Billable = true,
+                Hours = 8.0m
+            };
+            
+            isEditingTimeEntry = false;
+            showTimeEntryModal = true;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseTimeEntryModal()
+    {
+        showTimeEntryModal = false;
+        isEditingTimeEntry = false;
+        newTimeEntry = new TimeEntryFormModel();
+        StateHasChanged();
+    }
+
+    private async Task SaveTimeEntry()
+    {
+        if (!selectedDay.HasValue) return;
+
+        isSubmittingTimeEntry = true;
+        try
+        {
+            if (isEditingTimeEntry)
+            {
+                // 수정 로직
+                var updateRequest = new UpdateTimeEntryRequest
+                {
+                    ProjectId = newTimeEntry.ProjectId,
+                    Hours = newTimeEntry.Hours,
+                    TaskDescription = newTimeEntry.TaskDescription,
+                    Date = newTimeEntry.Date,
+                    Billable = newTimeEntry.Billable
+                };
+
+                var updatedEntry = await TimeEntryService.UpdateTimeEntryAsync(newTimeEntry.Id, updateRequest);
+                if (updatedEntry != null)
+                {
+                    // 로컬 데이터 업데이트
+                    var existingIndex = timeEntries.FindIndex(e => e.Id == newTimeEntry.Id);
+                    if (existingIndex >= 0)
+                    {
+                        timeEntries[existingIndex] = updatedEntry;
+                    }
+                }
+            }
+            else
+            {
+                // 새 생성 로직
+                var createRequest = new CreateTimeEntryRequest
+                {
+                    ProjectId = newTimeEntry.ProjectId,
+                    Hours = newTimeEntry.Hours,
+                    TaskDescription = newTimeEntry.TaskDescription,
+                    Date = newTimeEntry.Date,
+                    Billable = newTimeEntry.Billable
+                };
+
+                var createdEntry = await TimeEntryService.CreateTimeEntryAsync(createRequest);
+                if (createdEntry != null)
+                {
+                    timeEntries.Add(createdEntry);
+                }
+            }
+
+            // 요약 데이터 재계산
+            CalculateSummary();
+            CloseTimeEntryModal();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving time entry: {ex.Message}");
+            // TODO: 에러 토스트 메시지 표시
+        }
+        finally
+        {
+            isSubmittingTimeEntry = false;
+            StateHasChanged();
+        }
+    }
+
+    private void EditTimeEntry(TimeEntryDto entry)
+    {
+        newTimeEntry = new TimeEntryFormModel
+        {
+            Id = entry.Id,
+            ProjectId = entry.ProjectId,
+            Hours = entry.Hours,
+            TaskDescription = entry.TaskDescription ?? string.Empty,
+            Date = entry.Date,
+            Billable = entry.Billable
+        };
+        
+        isEditingTimeEntry = true;
+        StateHasChanged();
+    }
+
+    private async Task DeleteTimeEntry(Guid entryId)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "이 시간 기록을 삭제하시겠습니까?"))
+        {
+            try
+            {
+                var result = await TimeEntryService.DeleteTimeEntryAsync(entryId);
+                if (result)
+                {
+                    timeEntries.RemoveAll(e => e.Id == entryId);
+                    selectedDayEntries = GetDayEntries(selectedDay.Value);
+                    CalculateSummary();
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting time entry: {ex.Message}");
+                // TODO: 에러 토스트 메시지 표시
+            }
+        }
+    }
+
+    private void UseLocalFallbackData()
+    {
+        // 로컬 폴백 데이터 (API 연결 실패시 사용)
+        var today = DateTime.Today;
+        timeEntries = new List<TimeEntryDto>
+        {
+            new() { 
+                Id = Guid.NewGuid(), 
+                ProjectId = Guid.NewGuid(), 
+                ProjectName = "프로젝트 A", 
+                Hours = 8, 
+                Date = today.AddDays(-1), 
+                Billable = true, 
+                Approved = true 
+            },
+            new() { 
+                Id = Guid.NewGuid(), 
+                ProjectId = Guid.NewGuid(), 
+                ProjectName = "프로젝트 B", 
+                Hours = 4, 
+                Date = today, 
+                Billable = false, 
+                Approved = false 
+            }
+        };
+        
+        CalculateSummary();
+    }
+}
+
+<style>
+.timesheet-calendar {
+    font-size: 0.875rem;
+}
+
+.timesheet-day {
+    position: relative;
+    border: 1px solid #dee2e6 !important;
+}
+
+.timesheet-day:hover {
+    background-color: #f8f9fa !important;
+}
+</style>

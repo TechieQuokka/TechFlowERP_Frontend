@@ -1,0 +1,367 @@
+﻿@using TechFlowERP.Models.DTOs.Position
+@using TechFlowERP.Models.Requests.Position
+@using TechFlowERP.Web.Services.Interfaces
+@inject IPositionService PositionService
+@inject IJSRuntime JSRuntime
+@inject ILogger<PositionFormModal> Logger
+
+<div class="modal fade" id="positionModal" tabindex="-1" aria-labelledby="positionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="positionModalLabel">
+                    <i class="fas fa-sitemap me-2"></i>
+                    @(isEditMode ? "직급 수정" : "새 직급 추가")
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <EditForm Model="formModel" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+
+                <div class="modal-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">처리 중...</span>
+                            </div>
+                            <p class="mt-2 text-muted">@(isEditMode ? "수정" : "저장") 중입니다...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- 기본 정보 -->
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label for="title" class="form-label">
+                                        직급명 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputText id="title" class="form-control" @bind-Value="formModel.Title"
+                                               placeholder="예: 시니어 개발자, 팀장, 부장 등" />
+                                    <ValidationMessage For="() => formModel.Title" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="level" class="form-label">
+                                        레벨 <span class="text-danger">*</span>
+                                    </label>
+                                    <InputNumber id="level" class="form-control" @bind-Value="formModel.Level"
+                                                 min="1" max="10" />
+                                    <ValidationMessage For="() => formModel.Level" class="text-danger" />
+                                    <div class="form-text">1(신입) ~ 10(임원) 사이 값</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 급여 정보 -->
+                        <div class="row">
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3">
+                                    <i class="fas fa-money-bill-wave me-2"></i>급여 정보
+                                </h6>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="minSalary" class="form-label">
+                                        최소 급여 (만원) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <InputNumber id="minSalary" class="form-control" @bind-Value="formModel.MinSalary"
+                                                     min="0" step="10" @onchange="OnSalaryChanged" />
+                                        <span class="input-group-text">만원</span>
+                                    </div>
+                                    <ValidationMessage For="() => formModel.MinSalary" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="maxSalary" class="form-label">
+                                        최대 급여 (만원) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <InputNumber id="maxSalary" class="form-control" @bind-Value="formModel.MaxSalary"
+                                                     min="0" step="10" @onchange="OnSalaryChanged" />
+                                        <span class="input-group-text">만원</span>
+                                    </div>
+                                    <ValidationMessage For="() => formModel.MaxSalary" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 급여 범위 검증 메시지 -->
+                        @if (!formModel.IsValidSalaryRange && formModel.MinSalary > 0 && formModel.MaxSalary > 0)
+                        {
+                            <div class="alert alert-warning d-flex align-items-center" role="alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <div>최소 급여는 최대 급여보다 작거나 같아야 합니다.</div>
+                            </div>
+                        }
+
+                        <!-- 급여 범위 시각화 -->
+                        @if (formModel.MinSalary > 0 && formModel.MaxSalary > 0 && formModel.IsValidSalaryRange)
+                        {
+                            <div class="card bg-light mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title">급여 범위 미리보기</h6>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <small class="text-muted">@formModel.MinSalary.ToString("N0")만원</small>
+                                        <small class="text-muted">@formModel.MaxSalary.ToString("N0")만원</small>
+                                    </div>
+                                    <div class="progress" style="height: 8px;">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                                    </div>
+                                    <div class="text-center mt-2">
+                                        <small class="text-muted">
+                                            평균: @(((formModel.MinSalary + formModel.MaxSalary) / 2).ToString("N0"))만원
+                                            | 차이: @((formModel.MaxSalary - formModel.MinSalary).ToString("N0"))만원
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- 레벨별 특성 안내 -->
+                        <div class="card border-info">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>레벨별 특성 안내
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-primary">일반직 (레벨 1-3)</h6>
+                                        <ul class="small text-muted mb-3">
+                                            <li>레벨 1: 신입/인턴</li>
+                                            <li>레벨 2: 주니어</li>
+                                            <li>레벨 3: 시니어</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="text-warning">관리직 (레벨 4+)</h6>
+                                        <ul class="small text-muted mb-3">
+                                            <li>레벨 4: 팀장/TL</li>
+                                            <li>레벨 5: 부장/실장</li>
+                                            <li>레벨 6+: 임원급</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="alert alert-light border-0 mb-0">
+                                    <small class="text-muted">
+                                        <i class="fas fa-lightbulb me-1"></i>
+                                        레벨 4 이상은 자동으로 관리직으로 분류되며, 부서장 배정 시 우선적으로 표시됩니다.
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled="@isLoading">
+                        취소
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@(isLoading || !IsFormValid())">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i>
+                        }
+                        @(isEditMode ? "수정" : "저장")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnPositionSaved { get; set; }
+
+    private bool isEditMode = false;
+    private bool isLoading = false;
+    private Guid? currentPositionId = null;
+
+    private PositionFormModel formModel = new();
+
+    public async Task OpenAsync(PositionDto? position = null)
+    {
+        isEditMode = position != null;
+        currentPositionId = position?.Id;
+
+        if (isEditMode && position != null)
+        {
+            // 수정 모드: 기존 데이터 로드
+            formModel = new PositionFormModel
+            {
+                Title = position.Title,
+                Level = position.Level,
+                MinSalary = position.MinSalary,
+                MaxSalary = position.MaxSalary
+            };
+        }
+        else
+        {
+            // 생성 모드: 빈 폼
+            formModel = new PositionFormModel();
+        }
+
+        // Bootstrap 모달 열기 - 간소화된 방법
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('positionModal')).show()");
+        StateHasChanged();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (!IsFormValid()) return;
+
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (isEditMode && currentPositionId.HasValue)
+            {
+                // 수정
+                var updateRequest = new UpdatePositionRequest
+                {
+                    Title = formModel.Title,
+                    Level = formModel.Level,
+                    MinSalary = formModel.MinSalary,
+                    MaxSalary = formModel.MaxSalary
+                };
+
+                var result = await PositionService.UpdatePositionAsync(currentPositionId.Value, updateRequest);
+
+                if (result != null)
+                {
+                    await OnPositionSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "직급 수정에 실패했습니다.");
+                }
+            }
+            else
+            {
+                // 생성
+                var createRequest = new CreatePositionRequest
+                {
+                    Title = formModel.Title,
+                    Level = formModel.Level,
+                    MinSalary = formModel.MinSalary,
+                    MaxSalary = formModel.MaxSalary
+                };
+
+                var result = await PositionService.CreatePositionAsync(createRequest);
+
+                if (result != null)
+                {
+                    await OnPositionSaved.InvokeAsync();
+                    await CloseModal();
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "직급 생성에 실패했습니다.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직급 {Action} 중 오류 발생", isEditMode ? "수정" : "생성");
+            await JSRuntime.InvokeVoidAsync("alert", $"직급 {(isEditMode ? "수정" : "생성")} 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        // Bootstrap 모달 닫기 - 간소화된 방법
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('positionModal')).hide()");
+    }
+
+    private void OnSalaryChanged()
+    {
+        StateHasChanged(); // 급여 범위 미리보기 업데이트
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(formModel.Title) &&
+               formModel.Level >= 1 && formModel.Level <= 10 &&
+               formModel.MinSalary >= 0 &&
+               formModel.MaxSalary >= 0 &&
+               formModel.IsValidSalaryRange;
+    }
+
+    // 폼 모델 클래스
+    private class PositionFormModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public int Level { get; set; } = 1;
+        public decimal MinSalary { get; set; } = 0;
+        public decimal MaxSalary { get; set; } = 0;
+
+        public bool IsValidSalaryRange => MinSalary <= MaxSalary;
+    }
+}
+
+<style>
+    .modal-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .modal-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+    .alert-info {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+    }
+
+    .input-group-text {
+        background-color: #e9ecef;
+        border-color: #ced4da;
+    }
+
+    .card-header.bg-info {
+        background-color: #0dcaf0 !important;
+    }
+
+    .progress {
+        background-color: #e9ecef;
+    }
+
+    .alert-light {
+        background-color: #f8f9fa;
+        border-color: #dee2e6;
+        color: #495057;
+    }
+</style>

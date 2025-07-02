@@ -1,0 +1,641 @@
+﻿@page "/employees/{EmployeeId:guid}/edit"
+@using TechFlowERP.Models.DTOs.Employee
+@using TechFlowERP.Models.DTOs.Department
+@using TechFlowERP.Models.DTOs.Position
+@using TechFlowERP.Models.Requests.Employee
+@using TechFlowERP.Web.Services.Interfaces
+@using TechFlowERP.Shared.Components.Common
+@inject IEmployeeService EmployeeService
+@inject IDepartmentService DepartmentService
+@inject IPositionService PositionService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<EditEmployee> Logger
+
+<PageTitle>@(employee?.Name ?? "직원") 수정 - 직원 관리</PageTitle>
+
+<div class="container-fluid">
+    @if (isLoading)
+    {
+        <LoadingSpinner />
+    }
+    else if (employee == null)
+    {
+        <!-- 직원을 찾을 수 없음 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-user-slash fa-4x text-muted mb-4"></i>
+                    <h3>직원을 찾을 수 없습니다</h3>
+                    <p class="text-muted">요청하신 직원 정보가 존재하지 않거나 삭제되었습니다.</p>
+                    <button class="btn btn-primary" @onclick="NavigateToList">
+                        <i class="fas fa-arrow-left me-2"></i>직원 목록으로
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- 📊 Header Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">
+                            <i class="fas fa-user-edit me-2"></i>@employee.Name 수정
+                        </h2>
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/employees" class="text-decoration-none">직원 관리</a>
+                                </li>
+                                <li class="breadcrumb-item">
+                                    <a href="/employees/@EmployeeId" class="text-decoration-none">@employee.Name</a>
+                                </li>
+                                <li class="breadcrumb-item active">수정</li>
+                            </ol>
+                        </nav>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary me-2" @onclick="NavigateToDetail">
+                            <i class="fas fa-arrow-left me-2"></i>돌아가기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <EditForm Model="updateRequest" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+
+            <div class="row">
+                <!-- 📝 Main Form -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-user me-2"></i>기본 정보 수정
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <!-- 이름 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">이름</label>
+                                    <InputText @bind-Value="updateRequest.Name"
+                                               class="form-control"
+                                               placeholder="홍길동" />
+                                    <ValidationMessage For="@(() => updateRequest.Name)" class="text-danger" />
+                                </div>
+
+                                <!-- 이메일 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">이메일</label>
+                                    <InputText @bind-Value="updateRequest.Email"
+                                               class="form-control"
+                                               placeholder="hong@company.com"
+                                               type="email" />
+                                    <ValidationMessage For="@(() => updateRequest.Email)" class="text-danger" />
+                                    @if (updateRequest.Email != employee.Email)
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            이메일 변경은 로그인에 영향을 줄 수 있습니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 부서 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">부서</label>
+                                    <InputSelect @bind-Value="updateRequest.DepartmentId" class="form-select">
+                                        <option value="">부서 선택</option>
+                                        @foreach (var department in departments)
+                                        {
+                                            <option value="@department.Id">@department.Name</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.DepartmentId)" class="text-danger" />
+                                    @if (updateRequest.DepartmentId != employee.DepartmentId)
+                                    {
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            부서 변경 시 기존 프로젝트 할당을 검토해주세요.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 직급 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">직급</label>
+                                    <InputSelect @bind-Value="updateRequest.PositionId" class="form-select">
+                                        <option value="">직급 선택</option>
+                                        @foreach (var position in positions)
+                                        {
+                                            <option value="@position.Id">@position.Title (Level @position.Level)</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.PositionId)" class="text-danger" />
+                                    @if (updateRequest.PositionId != employee.PositionId)
+                                    {
+                                        <small class="text-info">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            직급 변경 시 급여 범위를 확인해주세요.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 매니저 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">상급자</label>
+                                    <InputSelect @bind-Value="updateRequest.ManagerId" class="form-select">
+                                        <option value="">상급자 선택</option>
+                                        @foreach (var manager in managers.Where(m => m.Id != EmployeeId))
+                                        {
+                                            <option value="@manager.Id">@manager.Name (@manager.DepartmentName)</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="@(() => updateRequest.ManagerId)" class="text-danger" />
+                                    <small class="text-muted">본인은 상급자로 선택할 수 없습니다.</small>
+                                </div>
+
+                                <!-- 입사일 -->
+                                <div class="col-md-6">
+                                    <label class="form-label required">입사일</label>
+                                    <InputDate @bind-Value="updateRequest.HireDate"
+                                               class="form-control" />
+                                    <ValidationMessage For="@(() => updateRequest.HireDate)" class="text-danger" />
+                                    @if (updateRequest.HireDate != employee.HireDate)
+                                    {
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            입사일 변경은 연차 계산에 영향을 줍니다.
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 급여 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">급여 (만원)</label>
+                                    <InputNumber @bind-Value="updateRequest.Salary"
+                                                 class="form-control"
+                                                 placeholder="3500" />
+                                    <ValidationMessage For="@(() => updateRequest.Salary)" class="text-danger" />
+                                    @if (selectedPosition != null)
+                                    {
+                                        <small class="text-muted">
+                                            권장 범위: @selectedPosition.MinSalary.ToString("N0") ~ @selectedPosition.MaxSalary.ToString("N0")만원
+                                        </small>
+                                        @if (updateRequest.Salary < selectedPosition.MinSalary || updateRequest.Salary > selectedPosition.MaxSalary)
+                                        {
+                                            <br>
+                                
+                                            <small class="text-warning">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                                권장 급여 범위를 벗어납니다.
+                                            </small>
+                                        }
+                                    }
+                                </div>
+
+                                <!-- 연차 잔여일수 -->
+                                <div class="col-md-6">
+                                    <label class="form-label">연차 잔여일수</label>
+                                    <InputNumber @bind-Value="updateRequest.LeaveBalance"
+                                                 class="form-control"
+                                                 placeholder="15" />
+                                    <ValidationMessage For="@(() => updateRequest.LeaveBalance)" class="text-danger" />
+                                    @if (updateRequest.LeaveBalance != employee.LeaveBalance)
+                                    {
+                                        <small class="text-info">
+                                            변경량: @((updateRequest.LeaveBalance - employee.LeaveBalance) > 0 ? "+" : "")@(updateRequest.LeaveBalance - employee.LeaveBalance)일
+                                        </small>
+                                    }
+                                </div>
+
+                                <!-- 활성 상태 -->
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <InputCheckbox @bind-Value="updateRequest.IsActive"
+                                                       class="form-check-input"
+                                                       id="isActive" />
+                                        <label class="form-check-label" for="isActive">
+                                            활성 상태
+                                        </label>
+                                    </div>
+                                    @if (updateRequest.IsActive != employee.IsActive)
+                                    {
+                                        @if (!updateRequest.IsActive)
+                                        {
+                                            <small class="text-danger">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                                비활성화하면 이 직원은 시스템에 접근할 수 없습니다.
+                                            </small>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-success">
+                                                <i class="fas fa-check me-1"></i>
+                                                활성화하면 이 직원이 시스템에 접근할 수 있습니다.
+                                            </small>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 변경 내역 요약 -->
+                    @if (HasChanges())
+                    {
+                        <div class="card mt-4">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0 text-dark">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>변경 내역 확인
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-3">다음 정보가 변경됩니다:</p>
+                                <div class="row g-3">
+                                    @foreach (var change in GetChanges())
+                                    {
+                                        <div class="col-md-6">
+                                            <div class="border-start border-warning ps-3">
+                                                <strong>@change.Field</strong><br>
+                                                <span class="text-muted">@change.OldValue</span><br>
+                                                <span class="text-primary">→ @change.NewValue</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- 📊 Info Panel -->
+                <div class="col-lg-4">
+                    <div class="card position-sticky" style="top: 20px;">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle me-2"></i>수정 정보
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- 현재 직원 정보 -->
+                            <div class="mb-4">
+                                <h6 class="text-primary">현재 정보</h6>
+                                <div class="bg-light p-3 rounded">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="avatar-sm bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
+                                            <span class="text-white fw-bold">@GetInitials(employee.Name)</span>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold">@employee.Name</div>
+                                            <small class="text-muted">@employee.Email</small>
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 small">
+                                        <div class="col-6">부서: @(employee.DepartmentName ?? "미배정")</div>
+                                        <div class="col-6">직급: @(employee.PositionTitle ?? "미설정")</div>
+                                        <div class="col-6">급여: @employee.Salary.ToString("N0")만원</div>
+                                        <div class="col-6">연차: @@employee.LeaveBalance일</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 선택된 부서 정보 -->
+                            @if (selectedDepartment != null)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-success">선택된 부서</h6>
+                                    <div class="bg-light p-3 rounded">
+                                        <div><strong>@selectedDepartment.Name</strong></div>
+                                        <small class="text-muted">직원 수: @@selectedDepartment.EmployeeCount명</small><br>
+                                        <small class="text-muted">예산: @selectedDepartment.Budget.ToString("N0")만원</small>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 선택된 직급 정보 -->
+                            @if (selectedPosition != null)
+                            {
+                                <div class="mb-4">
+                                    <h6 class="text-info">선택된 직급</h6>
+                                    <div class="bg-light p-3 rounded">
+                                        <div><strong>@selectedPosition.Title</strong></div>
+                                        <small class="text-muted">레벨: @selectedPosition.Level</small><br>
+                                        <small class="text-muted">급여 범위: @selectedPosition.MinSalary.ToString("N0") ~ @selectedPosition.MaxSalary.ToString("N0")만원</small>
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- 수정 팁 -->
+                            <div class="mb-4">
+                                <h6 class="text-warning">수정 시 주의사항</h6>
+                                <ul class="list-unstyled small text-muted">
+                                    <li><i class="fas fa-check text-success me-2"></i>이메일 변경 시 로그인 확인 필요</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>부서 변경 시 프로젝트 재배정 검토</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>직급 변경 시 권한 확인 필요</li>
+                                    <li><i class="fas fa-check text-success me-2"></i>비활성화 시 즉시 접근 차단</li>
+                                </ul>
+                            </div>
+
+                            <!-- 저장 버튼 -->
+                            <div class="d-grid gap-2">
+                                <button type="submit"
+                                        class="btn btn-success"
+                                        disabled="@(isSubmitting || !HasChanges())">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                        <span>저장 중...</span>
+                                    }
+                                    else if (!HasChanges())
+                                    {
+                                        <i class="fas fa-check me-2"></i>
+                                        <span>변경사항 없음</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-save me-2"></i>
+                                        <span>변경사항 저장</span>
+                                    }
+                                </button>
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        @onclick="NavigateToDetail"
+                                        disabled="@isSubmitting">
+                                    <i class="fas fa-times me-2"></i>취소
+                                </button>
+                                @if (HasChanges())
+                                {
+                                    <button type="button"
+                                            class="btn btn-outline-warning btn-sm"
+                                            @onclick="ResetChanges"
+                                            disabled="@isSubmitting">
+                                        <i class="fas fa-undo me-2"></i>변경사항 되돌리기
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+    }
+</div>
+
+<style>
+    .required::after {
+        content: " *";
+        color: red;
+    }
+
+    .avatar-sm {
+        width: 32px;
+        height: 32px;
+    }
+
+    .position-sticky {
+        position: -webkit-sticky;
+        position: sticky;
+    }
+</style>
+
+@code {
+    [Parameter] public Guid EmployeeId { get; set; }
+
+    // 📊 Data Properties
+    private EmployeeDto? employee;
+    private UpdateEmployeeRequest updateRequest = new();
+    private List<DepartmentDto> departments = new();
+    private List<PositionDto> positions = new();
+    private List<EmployeeDto> managers = new();
+
+    // 🔄 State Properties
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+
+    // 💡 Computed Properties
+    private DepartmentDto? selectedDepartment =>
+        updateRequest.DepartmentId.HasValue ?
+        departments.FirstOrDefault(d => d.Id == updateRequest.DepartmentId.Value) : null;
+
+    private PositionDto? selectedPosition =>
+        updateRequest.PositionId.HasValue ?
+        positions.FirstOrDefault(p => p.Id == updateRequest.PositionId.Value) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 직원 정보 먼저 로드
+            employee = await EmployeeService.GetEmployeeByIdAsync(EmployeeId);
+
+            if (employee != null)
+            {
+                // 직원 정보를 기반으로 수정 요청 초기화
+                InitializeUpdateRequest();
+
+                // 나머지 데이터 병렬 로드
+                var tasks = new[]
+                {
+                    LoadDepartments(),
+                    LoadPositions(),
+                    LoadManagers()
+                };
+
+                await Task.WhenAll(tasks);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "데이터 로드 중 오류 발생");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void InitializeUpdateRequest()
+    {
+        if (employee == null) return;
+
+        updateRequest = new UpdateEmployeeRequest
+        {
+            Name = employee.Name,
+            Email = employee.Email,
+            DepartmentId = employee.DepartmentId,
+            PositionId = employee.PositionId,
+            ManagerId = employee.ManagerId,
+            HireDate = employee.HireDate,
+            Salary = employee.Salary,
+            LeaveBalance = employee.LeaveBalance,
+            IsActive = employee.IsActive
+        };
+    }
+
+    private async Task LoadDepartments()
+    {
+        departments = await DepartmentService.GetAllDepartmentsAsync();
+    }
+
+    private async Task LoadPositions()
+    {
+        positions = await PositionService.GetAllPositionsAsync();
+    }
+
+    private async Task LoadManagers()
+    {
+        managers = await EmployeeService.GetActiveEmployeesAsync();
+        // 매니저급 직원만 필터링 (Level 4 이상)
+        var managementPositions = positions.Where(p => p.Level >= 4).Select(p => p.Id).ToList();
+        managers = managers.Where(e => e.PositionId.HasValue && managementPositions.Contains(e.PositionId.Value)).ToList();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (isSubmitting || employee == null) return;
+
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await EmployeeService.UpdateEmployeeAsync(EmployeeId, updateRequest);
+
+            if (result != null)
+            {
+                // 성공 시 직원 상세 페이지로 이동
+                Navigation.NavigateTo($"/employees/{EmployeeId}");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "직원 정보 수정에 실패했습니다. 다시 시도해주세요.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "직원 정보 수정 중 오류 발생");
+            await JSRuntime.InvokeVoidAsync("alert", "직원 정보 수정 중 오류가 발생했습니다.");
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    // 🔄 Change Detection
+    private bool HasChanges()
+    {
+        if (employee == null) return false;
+
+        return updateRequest.Name != employee.Name ||
+               updateRequest.Email != employee.Email ||
+               updateRequest.DepartmentId != employee.DepartmentId ||
+               updateRequest.PositionId != employee.PositionId ||
+               updateRequest.ManagerId != employee.ManagerId ||
+               updateRequest.HireDate != employee.HireDate ||
+               updateRequest.Salary != employee.Salary ||
+               updateRequest.LeaveBalance != employee.LeaveBalance ||
+               updateRequest.IsActive != employee.IsActive;
+    }
+
+    private List<ChangeInfo> GetChanges()
+    {
+        var changes = new List<ChangeInfo>();
+        if (employee == null) return changes;
+
+        if (updateRequest.Name != employee.Name)
+            changes.Add(new ChangeInfo("이름", employee.Name, updateRequest.Name));
+
+        if (updateRequest.Email != employee.Email)
+            changes.Add(new ChangeInfo("이메일", employee.Email, updateRequest.Email));
+
+        if (updateRequest.DepartmentId != employee.DepartmentId)
+        {
+            var oldDept = employee.DepartmentName ?? "미배정";
+            var newDept = selectedDepartment?.Name ?? "미배정";
+            changes.Add(new ChangeInfo("부서", oldDept, newDept));
+        }
+
+        if (updateRequest.PositionId != employee.PositionId)
+        {
+            var oldPos = employee.PositionTitle ?? "미설정";
+            var newPos = selectedPosition?.Title ?? "미설정";
+            changes.Add(new ChangeInfo("직급", oldPos, newPos));
+        }
+
+        if (updateRequest.HireDate != employee.HireDate)
+            changes.Add(new ChangeInfo("입사일", employee.HireDate.ToString("yyyy-MM-dd"), updateRequest.HireDate.ToString("yyyy-MM-dd")));
+
+        if (updateRequest.Salary != employee.Salary)
+            changes.Add(new ChangeInfo("급여", $"{employee.Salary:N0}만원", $"{updateRequest.Salary:N0}만원"));
+
+        if (updateRequest.LeaveBalance != employee.LeaveBalance)
+            changes.Add(new ChangeInfo("연차", $"{employee.LeaveBalance}일", $"{updateRequest.LeaveBalance}일"));
+
+        if (updateRequest.IsActive != employee.IsActive)
+            changes.Add(new ChangeInfo("상태", employee.IsActive ? "활성" : "비활성", updateRequest.IsActive ? "활성" : "비활성"));
+
+        return changes;
+    }
+
+    private void ResetChanges()
+    {
+        InitializeUpdateRequest();
+        StateHasChanged();
+    }
+
+    // 🧭 Navigation
+    private void NavigateToList()
+    {
+        Navigation.NavigateTo("/employees");
+    }
+
+    private void NavigateToDetail()
+    {
+        Navigation.NavigateTo($"/employees/{EmployeeId}");
+    }
+
+    // 🛠️ Helper Methods
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 2)
+        {
+            return $"{words[0][0]}{words[1][0]}".ToUpper();
+        }
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    // 📊 Helper Classes
+    public class ChangeInfo
+    {
+        public string Field { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+
+        public ChangeInfo(string field, string oldValue, string newValue)
+        {
+            Field = field;
+            OldValue = oldValue;
+            NewValue = newValue;
+        }
+    }
+}
